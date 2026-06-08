@@ -98,13 +98,27 @@ async def ping():
 
 @app.get("/")
 async def root():
-    return {
-        "service": "Claude Market API v3.2",
-        "endpoints": ["/ping", "/quote", "/conviction", "/vet", "/scan", "/watchlist"],
-        "fmp_plan": "Starter",
-        "watchlist_source": f"GitHub Gist {GIST_ID} — updated dynamically by Claude",
-        "mobile_note": "Fetch /ping first on Claude.ai mobile to whitelist domain"
-    }
+    from fastapi.responses import HTMLResponse
+    html = """<!DOCTYPE html>
+<html>
+<head>
+<title>Claude Market API - web-production-7e4e6.up.railway.app</title>
+<meta name="description" content="Live FMP market data proxy for Claude AI. Base URL: https://web-production-7e4e6.up.railway.app">
+</head>
+<body>
+<h1>Claude Market API</h1>
+<p>Live market data proxy at <strong>https://web-production-7e4e6.up.railway.app</strong></p>
+<ul>
+<li><a href="https://web-production-7e4e6.up.railway.app/ping">https://web-production-7e4e6.up.railway.app/ping</a></li>
+<li><a href="https://web-production-7e4e6.up.railway.app/quote?symbols=NVDA">https://web-production-7e4e6.up.railway.app/quote?symbols=NVDA</a></li>
+<li><a href="https://web-production-7e4e6.up.railway.app/conviction?symbol=NVDA">https://web-production-7e4e6.up.railway.app/conviction?symbol=NVDA</a></li>
+<li><a href="https://web-production-7e4e6.up.railway.app/vet?symbol=NVDA">https://web-production-7e4e6.up.railway.app/vet?symbol=NVDA</a></li>
+<li><a href="https://web-production-7e4e6.up.railway.app/scan?symbols=NVDA">https://web-production-7e4e6.up.railway.app/scan?symbols=NVDA</a></li>
+<li><a href="https://web-production-7e4e6.up.railway.app/watchlist">https://web-production-7e4e6.up.railway.app/watchlist</a></li>
+</ul>
+</body>
+</html>"""
+    return HTMLResponse(content=html)
 
 
 @app.get("/quote")
