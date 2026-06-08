@@ -1,12 +1,21 @@
 import os
 import asyncio
 from datetime import datetime
-from fastapi import FastAPI, Query
+from fastapi import FastAPI, Query, Depends
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import JSONResponse
 import httpx
 
 app = FastAPI(title="Claude Market API", version="3.2")
+
+# ── Auth ──────────────────────────────────────────────────────────────────────
+API_SECRET = os.environ.get("API_SECRET", "")
+
+from fastapi import Header, HTTPException
+
+async def verify_key(x_api_key: str = Header(None)):
+    if API_SECRET and x_api_key != API_SECRET:
+        raise HTTPException(status_code=401, detail="Unauthorized")
 
 app.add_middleware(
     CORSMiddleware,
@@ -407,7 +416,7 @@ async def scan(symbols: str = Query(...)):
 
 
 @app.get("/watchlist")
-async def watchlist():
+async def watchlist(_key=Depends(verify_key)):
     """Live watchlist — zones and metadata fetched from GitHub Gist, prices from FMP."""
     wl_data = await fetch_watchlist_data()
 
