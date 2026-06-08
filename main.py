@@ -1,7 +1,7 @@
 import os
 import asyncio
 from datetime import datetime
-from fastapi import FastAPI, Query, Depends
+from fastapi import FastAPI, Query, Depends, Header, HTTPException
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import JSONResponse
 import httpx
@@ -11,7 +11,6 @@ app = FastAPI(title="Claude Market API", version="3.2")
 # ── Auth ──────────────────────────────────────────────────────────────────────
 API_SECRET = os.environ.get("API_SECRET", "")
 
-from fastapi import Header, HTTPException
 
 async def verify_key(x_api_key: str = Header(None)):
     if API_SECRET and x_api_key != API_SECRET:
