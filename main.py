@@ -8,14 +8,6 @@ import httpx
 
 app = FastAPI(title="Claude Market API", version="3.2")
 
-# ── Auth ──────────────────────────────────────────────────────────────────────
-API_SECRET = os.environ.get("API_SECRET", "")
-
-
-async def verify_key(x_api_key: str = Header(None)):
-    if API_SECRET and x_api_key != API_SECRET:
-        raise HTTPException(status_code=401, detail="Unauthorized")
-
 app.add_middleware(
     CORSMiddleware,
     allow_origins=["*"],
@@ -23,6 +15,14 @@ app.add_middleware(
     allow_headers=["*"],
     expose_headers=["*"],
 )
+
+# ── Auth ──────────────────────────────────────────────────────────────────────
+API_SECRET = os.environ.get("API_SECRET", "")
+
+async def verify_key(x_api_key: str = Header(default=None)):
+    if API_SECRET and x_api_key != API_SECRET:
+        raise HTTPException(status_code=401, detail="Unauthorized")
+
 
 FMP_KEY = os.environ.get("FMP_API_KEY", "")
 FMP_BASE = "https://financialmodelingprep.com/stable"
@@ -109,13 +109,12 @@ async def root():
     from fastapi.responses import HTMLResponse
     html = """<!DOCTYPE html>
 <html>
-<head>
-<title>Claude Market API - web-production-7e4e6.up.railway.app</title>
-<meta name="description" content="Live FMP market data proxy for Claude AI. Base URL: https://web-production-7e4e6.up.railway.app">
+<head><title>Claude Market API</title>
+<meta name="description" content="Live market data proxy at https://web-production-7e4e6.up.railway.app">
 </head>
 <body>
 <h1>Claude Market API</h1>
-<p>Live market data proxy at <strong>https://web-production-7e4e6.up.railway.app</strong></p>
+<p>Base URL: <strong>https://web-production-7e4e6.up.railway.app</strong></p>
 <ul>
 <li><a href="https://web-production-7e4e6.up.railway.app/ping">https://web-production-7e4e6.up.railway.app/ping</a></li>
 <li><a href="https://web-production-7e4e6.up.railway.app/quote?symbols=NVDA">https://web-production-7e4e6.up.railway.app/quote?symbols=NVDA</a></li>
