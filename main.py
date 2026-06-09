@@ -3,7 +3,7 @@ import asyncio
 from datetime import datetime
 from fastapi import FastAPI, Query, Depends, Header, HTTPException
 from fastapi.middleware.cors import CORSMiddleware
-from fastapi.responses import JSONResponse, HTMLResponse
+from fastapi.responses import JSONResponse
 import httpx
 
 app = FastAPI(title="Claude Market API", version="3.2")
@@ -106,28 +106,23 @@ async def ping():
 
 @app.get("/")
 async def root():
+    from fastapi.responses import HTMLResponse
     html = """<!DOCTYPE html>
 <html>
-<head>
-<title>mktpxdata72.com - Claude Market API</title>
-<meta name="description" content="mktpxdata72.com - Live FMP market data proxy for conviction scoring and portfolio scans. Endpoints: /quote /conviction /financials /scan /vet /watchlist">
+<head><title>Claude Market API</title>
+<meta name="description" content="Live market data proxy at https://web-production-7e4e6.up.railway.app">
 </head>
 <body>
-<h1>mktpxdata72.com - Claude Market API</h1>
-<p>Live FMP data proxy for conviction scoring and portfolio scans.</p>
-<p>Primary URL: <strong><a href="https://mktpxdata72.com">https://mktpxdata72.com</a></strong></p>
-<p>Backup URL: <strong>https://web-production-7e4e6.up.railway.app</strong></p>
-<h2>Endpoints</h2>
+<h1>Claude Market API</h1>
+<p>Base URL: <strong>https://web-production-7e4e6.up.railway.app</strong></p>
 <ul>
-<li><a href="https://mktpxdata72.com/ping">https://mktpxdata72.com/ping</a> — health check (no auth)</li>
-<li><a href="https://mktpxdata72.com/quote?symbols=NVDA">https://mktpxdata72.com/quote?symbols=NVDA</a> — live batch quotes</li>
-<li><a href="https://mktpxdata72.com/conviction?symbol=NVDA">https://mktpxdata72.com/conviction?symbol=NVDA</a> — full conviction data</li>
-<li><a href="https://mktpxdata72.com/financials?symbol=NVDA">https://mktpxdata72.com/financials?symbol=NVDA</a> — quarterly financials</li>
-<li><a href="https://mktpxdata72.com/scan?symbols=NVDA,AAPL">https://mktpxdata72.com/scan?symbols=NVDA,AAPL</a> — RSI + price scan</li>
-<li><a href="https://mktpxdata72.com/vet?symbol=NVDA">https://mktpxdata72.com/vet?symbol=NVDA</a> — Phase 0 vetting gate</li>
-<li><a href="https://mktpxdata72.com/watchlist">https://mktpxdata72.com/watchlist</a> — watchlist with zone status</li>
+<li><a href="https://web-production-7e4e6.up.railway.app/ping">https://web-production-7e4e6.up.railway.app/ping</a></li>
+<li><a href="https://web-production-7e4e6.up.railway.app/quote?symbols=NVDA">https://web-production-7e4e6.up.railway.app/quote?symbols=NVDA</a></li>
+<li><a href="https://web-production-7e4e6.up.railway.app/conviction?symbol=NVDA">https://web-production-7e4e6.up.railway.app/conviction?symbol=NVDA</a></li>
+<li><a href="https://web-production-7e4e6.up.railway.app/vet?symbol=NVDA">https://web-production-7e4e6.up.railway.app/vet?symbol=NVDA</a></li>
+<li><a href="https://web-production-7e4e6.up.railway.app/scan?symbols=NVDA">https://web-production-7e4e6.up.railway.app/scan?symbols=NVDA</a></li>
+<li><a href="https://web-production-7e4e6.up.railway.app/watchlist">https://web-production-7e4e6.up.railway.app/watchlist</a></li>
 </ul>
-<p>All endpoints except /ping require header: x-api-key</p>
 </body>
 </html>"""
     return HTMLResponse(content=html)
@@ -417,71 +412,6 @@ async def scan(symbols: str = Query(...)):
         }
     return {"timestamp": datetime.utcnow().isoformat(), "count": len(tickers), "data": output}
 
-
-
-@app.get("/financials")
-async def financials(
-    symbol: str = Query(...),
-    period: str = Query(default="quarter"),
-    limit: int = Query(default=4),
-    _key=Depends(verify_key)
-):
-    """
-    Returns quarterly or annual income statement, key metrics,
-    financial scores, and earnings surprises for any US ticker.
-    period: 'quarter' or 'annual'
-    limit: number of periods (default 4)
-    """
-    sym = symbol.upper()
-    async with httpx.AsyncClient() as client:
-        income_r, metrics_r, scores_r, earnings_r, balance_r, cashflow_r = await asyncio.gather(
-            fmp(client, "/income-statement", {"symbol": sym, "period": period, "limit": limit}),
-            fmp(client, "/key-metrics", {"symbol": sym, "period": period, "limit": limit}),
-            fmp(client, "/financial-scores", {"symbol": sym}),
-            fmp(client, "/earnings-surprises", {"symbol": sym, "limit": 8}),
-            fmp(client, "/balance-sheet-statement", {"symbol": sym, "period": period, "limit": limit}),
-            fmp(client, "/cash-flow-statement", {"symbol": sym, "period": period, "limit": limit}),
-        )
-
-    eps_history = []
-    if isinstance(earnings_r, list):
-        for e in earnings_r[:4]:
-            actual = e.get("actualEarningResult")
-            est = e.get("estimatedEarning")
-            beat = actual >= est if actual is not None and est is not None else None
-            pct = round(((actual - est) / abs(est)) * 100, 1) if beat is not None and est != 0 else None
-            eps_history.append({
-                "date": str(e.get("date", ""))[:10],
-                "estimated": est,
-                "actual": actual,
-                "beat": beat,
-                "surprise_pct": pct
-            })
-    beat_count = sum(1 for e in eps_history if e.get("beat"))
-
-    sc = first(scores_r)
-    score_summary = {}
-    if sc and "altmanZScore" in sc:
-        z, f = sc.get("altmanZScore"), sc.get("piotroskiScore")
-        score_summary = {
-            "altman_z": z,
-            "piotroski_f": f,
-            "z_zone": "DISTRESS" if z and z < 1.8 else "GREY" if z and z < 3 else "SAFE" if z else "N/A",
-            "kill_flag": bool(z and z < 1.8 and f is not None and f <= 2)
-        }
-
-    return {
-        "symbol": sym,
-        "period": period,
-        "timestamp": datetime.utcnow().isoformat(),
-        "income_statement": income_r if isinstance(income_r, list) else [],
-        "key_metrics": metrics_r if isinstance(metrics_r, list) else [],
-        "balance_sheet": balance_r if isinstance(balance_r, list) else [],
-        "cash_flow": cashflow_r if isinstance(cashflow_r, list) else [],
-        "financial_scores": score_summary,
-        "eps_history": eps_history,
-        "beat_rate": f"{beat_count}/4"
-    }
 
 @app.get("/watchlist")
 async def watchlist(_key=Depends(verify_key)):
