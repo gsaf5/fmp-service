@@ -3,7 +3,7 @@ import asyncio
 from datetime import datetime
 from fastapi import FastAPI, Query, Depends, Header, HTTPException
 from fastapi.middleware.cors import CORSMiddleware
-from fastapi.responses import JSONResponse
+from fastapi.responses import JSONResponse, HTMLResponse
 import httpx
 
 app = FastAPI(title="Claude Market API", version="3.2")
@@ -106,7 +106,6 @@ async def ping():
 
 @app.get("/")
 async def root():
-    from fastapi.responses import HTMLResponse
     html = """<!DOCTYPE html>
 <html>
 <head>
