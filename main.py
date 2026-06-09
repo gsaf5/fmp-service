@@ -55,6 +55,15 @@ def first(data):
         return data
     return {}
 
+
+def no_cache(data: dict):
+    """Return JSON response with cache-control headers to prevent Railway CDN caching."""
+    return JSONResponse(content=data, headers={
+        "Cache-Control": "no-store, no-cache, must-revalidate, max-age=0",
+        "Pragma": "no-cache",
+        "Vary": "*"
+    })
+
 def scan_news(articles):
     flags = []
     for a in (articles or [])[:15]:
@@ -255,7 +264,7 @@ async def conviction(symbol: str = Query(...)):
     c5 = news_scan.get("pass", True)
     fails = sum(1 for x in [c1, c2, c3, c4, c5] if not x)
 
-    return {
+    return no_cache({
         "symbol": sym,
         "timestamp": datetime.utcnow().isoformat(),
         "quote": {"price": current_price, "change": q.get("change"),
@@ -298,7 +307,7 @@ async def conviction(symbol: str = Query(...)):
                 "check5_news": {"pass": c5, "detail": news_scan}
             }
         }
-    }
+    })
 
 
 @app.get("/vet")
@@ -410,7 +419,7 @@ async def scan(symbols: str = Query(...)):
             "rsi_signal": ("OVERSOLD" if rsi and rsi < 30 else "OVERBOUGHT" if rsi and rsi > 70
                            else "NEUTRAL" if rsi else "N/A")
         }
-    return {"timestamp": datetime.utcnow().isoformat(), "count": len(tickers), "data": output}
+    return no_cache({"timestamp": datetime.utcnow().isoformat(), "count": len(tickers), "data": output})
 
 
 @app.get("/watchlist")
