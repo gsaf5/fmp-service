@@ -143,6 +143,7 @@ async def root():
 <html><head>
 <title>mktpxdata72.com - Claude Market API</title>
 <meta name="description" content="mktpxdata72.com Claude Market API - FMP data proxy for conviction scoring and portfolio scans">
+<meta name="google-site-verification" content="IAO9n3Y0Xd0IyEv1tUzXDgWyL72GVLoBHM2nZkC_s_g" />
 </head><body>
 <h1>mktpxdata72.com - Claude Market API v5.0</h1>
 <p>Primary: <a href="https://mktpxdata72.com">https://mktpxdata72.com</a></p>
