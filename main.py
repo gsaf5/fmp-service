@@ -1,12 +1,13 @@
 import os
 import asyncio
+import math
 from datetime import datetime
 from fastapi import FastAPI, Query, Depends, Header, HTTPException
 from fastapi.middleware.cors import CORSMiddleware
-from fastapi.responses import JSONResponse
+from fastapi.responses import JSONResponse, HTMLResponse
 import httpx
 
-app = FastAPI(title="Claude Market API", version="3.2")
+app = FastAPI(title="Claude Market API", version="4.0")
 
 app.add_middleware(
     CORSMiddleware,
@@ -23,12 +24,9 @@ async def verify_key(x_api_key: str = Header(default=None)):
     if API_SECRET and x_api_key != API_SECRET:
         raise HTTPException(status_code=401, detail="Unauthorized")
 
-
 FMP_KEY = os.environ.get("FMP_API_KEY", "")
-FMP_BASE = "https://financialmodelingprep.com/stable"
+FMP_BASE = "https://financialmodelingprep.com/api/v3"   # ← v3, confirmed Starter
 
-# Watchlist lives in GitHub Gist — fetched dynamically at runtime
-# Claude updates the Gist directly; no code changes needed for watchlist edits
 GIST_ID = "4c5cd13043497addfbbe3eaaf0ae67a8"
 GIST_URL = f"https://gist.githubusercontent.com/gsaf5/{GIST_ID}/raw/watchlist.json"
 
@@ -38,6 +36,7 @@ RED_FLAG_KEYWORDS = [
     "fraud", "bankruptcy", "nasdaq notice", "nyse notice"
 ]
 
+# ── Helpers ───────────────────────────────────────────────────────────────────
 async def fmp(client, path, params=None):
     p = params or {}
     p["apikey"] = FMP_KEY
@@ -55,19 +54,37 @@ def first(data):
         return data
     return {}
 
-
-def no_cache(data: dict):
-    """Return JSON response with cache-control headers to prevent Railway CDN caching."""
+def no_cache(data):
     return JSONResponse(content=data, headers={
         "Cache-Control": "no-store, no-cache, must-revalidate, max-age=0",
         "Pragma": "no-cache",
         "Vary": "*"
     })
 
+def calc_rsi(prices, period=14):
+    """Calculate RSI from list of closing prices (newest first)."""
+    if len(prices) < period + 1:
+        return None
+    closes = list(reversed(prices))  # oldest first for calculation
+    gains, losses = [], []
+    for i in range(1, len(closes)):
+        delta = closes[i] - closes[i-1]
+        gains.append(max(delta, 0))
+        losses.append(max(-delta, 0))
+    avg_gain = sum(gains[:period]) / period
+    avg_loss = sum(losses[:period]) / period
+    for i in range(period, len(gains)):
+        avg_gain = (avg_gain * (period - 1) + gains[i]) / period
+        avg_loss = (avg_loss * (period - 1) + losses[i]) / period
+    if avg_loss == 0:
+        return 100.0
+    rs = avg_gain / avg_loss
+    return round(100 - (100 / (1 + rs)), 2)
+
 def scan_news(articles):
     flags = []
     for a in (articles or [])[:15]:
-        text = (a.get("title", "") + " " + a.get("text", "")).lower()
+        text = (a.get("title", "") + " " + a.get("text", "") + " " + a.get("summary", "")).lower()
         for kw in RED_FLAG_KEYWORDS:
             if kw in text:
                 flags.append({"keyword": kw, "headline": a.get("title", "")[:120],
@@ -94,107 +111,116 @@ def agg_insider(data):
     }
 
 async def fetch_watchlist_data():
-    """Fetch live watchlist JSON from GitHub Gist."""
     try:
         async with httpx.AsyncClient() as client:
             r = await client.get(GIST_URL, timeout=8)
-            r.raise_for_status()
             return r.json()
-    except Exception as e:
-        return {"error": str(e), "tickers": {}}
+    except Exception:
+        return {}
 
-
-# ── PING — fixes Claude.ai mobile sandbox domain whitelisting ─────────────────
+# ── Routes ────────────────────────────────────────────────────────────────────
 @app.get("/ping")
 async def ping():
-    return JSONResponse(
-        content={"status": "ok", "service": "Claude Market API v3.2", "ts": datetime.utcnow().isoformat()},
-        headers={"Cache-Control": "no-store", "Access-Control-Allow-Origin": "*"}
-    )
-
+    return {"status": "ok", "service": "Claude Market API v4.0", "ts": datetime.utcnow().isoformat()}
 
 @app.get("/")
 async def root():
-    from fastapi.responses import HTMLResponse
     html = """<!DOCTYPE html>
 <html>
-<head><title>Claude Market API</title>
-<meta name="description" content="Live market data proxy at https://web-production-7e4e6.up.railway.app">
+<head>
+<title>mktpxdata72.com - Claude Market API</title>
+<meta name="description" content="mktpxdata72.com Claude Market API - FMP proxy for conviction scoring and portfolio scans">
 </head>
 <body>
-<h1>Claude Market API</h1>
-<p>Base URL: <strong>https://web-production-7e4e6.up.railway.app</strong></p>
+<h1>mktpxdata72.com - Claude Market API v4.0</h1>
+<p>Primary: <a href="https://mktpxdata72.com">https://mktpxdata72.com</a></p>
+<p>Backup: <a href="https://web-production-7e4e6.up.railway.app">https://web-production-7e4e6.up.railway.app</a></p>
 <ul>
-<li><a href="https://web-production-7e4e6.up.railway.app/ping">https://web-production-7e4e6.up.railway.app/ping</a></li>
-<li><a href="https://web-production-7e4e6.up.railway.app/quote?symbols=NVDA">https://web-production-7e4e6.up.railway.app/quote?symbols=NVDA</a></li>
-<li><a href="https://web-production-7e4e6.up.railway.app/conviction?symbol=NVDA">https://web-production-7e4e6.up.railway.app/conviction?symbol=NVDA</a></li>
-<li><a href="https://web-production-7e4e6.up.railway.app/vet?symbol=NVDA">https://web-production-7e4e6.up.railway.app/vet?symbol=NVDA</a></li>
-<li><a href="https://web-production-7e4e6.up.railway.app/scan?symbols=NVDA">https://web-production-7e4e6.up.railway.app/scan?symbols=NVDA</a></li>
+<li><a href="https://mktpxdata72.com/ping">https://mktpxdata72.com/ping</a></li>
+<li><a href="https://web-production-7e4e6.up.railway.app/conviction?symbol=RKLB">https://web-production-7e4e6.up.railway.app/conviction?symbol=RKLB</a></li>
+<li><a href="https://web-production-7e4e6.up.railway.app/quote?symbols=RKLB,ASTS">https://web-production-7e4e6.up.railway.app/quote?symbols=RKLB,ASTS</a></li>
+<li><a href="https://web-production-7e4e6.up.railway.app/scan?symbols=RKLB,ASTS">https://web-production-7e4e6.up.railway.app/scan?symbols=RKLB,ASTS</a></li>
+<li><a href="https://web-production-7e4e6.up.railway.app/vet?symbol=RKLB">https://web-production-7e4e6.up.railway.app/vet?symbol=RKLB</a></li>
+<li><a href="https://web-production-7e4e6.up.railway.app/financials?symbol=RKLB">https://web-production-7e4e6.up.railway.app/financials?symbol=RKLB</a></li>
 <li><a href="https://web-production-7e4e6.up.railway.app/watchlist">https://web-production-7e4e6.up.railway.app/watchlist</a></li>
 </ul>
 </body>
 </html>"""
     return HTMLResponse(content=html)
 
-
 @app.get("/quote")
-async def quote(symbols: str = Query(...)):
+async def quote(symbols: str = Query(...), _key=Depends(verify_key)):
     tickers = [s.strip().upper() for s in symbols.split(",")]
     async with httpx.AsyncClient() as client:
-        results = await asyncio.gather(*[fmp(client, "/quote", {"symbol": t}) for t in tickers])
-    output = {}
-    for i, t in enumerate(tickers):
-        d = first(results[i])
-        output[t] = {
-            "price": d.get("price"),
+        results = await asyncio.gather(*[fmp(client, f"/quote/{t}") for t in tickers])
+    output = []
+    for t, r in zip(tickers, results):
+        d = first(r)
+        output.append({
+            "symbol": t,
+            "price": d.get("price", 0),
             "change": d.get("change"),
-            "changesPercentage": d.get("changePercentage"),
+            "changesPercentage": d.get("changesPercentage"),
             "dayLow": d.get("dayLow"),
             "dayHigh": d.get("dayHigh"),
             "yearLow": d.get("yearLow"),
             "yearHigh": d.get("yearHigh"),
             "volume": d.get("volume"),
-            "avgVolume": d.get("averageVolume"),
+            "avgVolume": d.get("avgVolume"),
             "marketCap": d.get("marketCap"),
             "priceAvg50": d.get("priceAvg50"),
             "priceAvg200": d.get("priceAvg200"),
-        }
-    return output
-
+        })
+    return no_cache({"timestamp": datetime.utcnow().isoformat(), "count": len(tickers), "data": output})
 
 @app.get("/conviction")
-async def conviction(symbol: str = Query(...)):
+async def conviction(symbol: str = Query(...), _key=Depends(verify_key)):
     sym = symbol.upper()
     async with httpx.AsyncClient() as client:
         (quote_r, profile_r, income_r, earnings_r, grades_r,
-         pt_r, insider_r, score_r, news_r, rsi_r, metrics_r) = await asyncio.gather(
-            fmp(client, "/quote", {"symbol": sym}),
-            fmp(client, "/profile", {"symbol": sym}),
+         pt_r, insider_r, score_r, news_r, hist_r, metrics_r) = await asyncio.gather(
+            fmp(client, f"/quote/{sym}"),
+            fmp(client, f"/profile/{sym}"),
             fmp(client, "/income-statement", {"symbol": sym, "limit": 5}),
             fmp(client, "/earnings-surprises", {"symbol": sym, "limit": 8}),
-            fmp(client, "/grades", {"symbol": sym, "limit": 20}),
+            fmp(client, "/grade", {"symbol": sym, "limit": 20}),
             fmp(client, "/price-target-summary", {"symbol": sym}),
             fmp(client, "/insider-trading/statistics", {"symbol": sym}),
-            fmp(client, "/financial-scores", {"symbol": sym}),
-            fmp(client, "/news/stock", {"tickers": sym, "limit": 20}),
-            fmp(client, "/technical-indicators/rsi", {"symbol": sym, "periodLength": 14, "timeframe": "1day", "limit": 10}),
-            fmp(client, "/key-metrics", {"symbol": sym, "limit": 2}),
+            fmp(client, "/score", {"symbol": sym}),
+            fmp(client, "/stock_news", {"tickers": sym, "limit": 20}),
+            fmp(client, f"/historical-price-full/{sym}", {"timeseries": 30}),
+            fmp(client, "/key-metrics", {"symbol": sym, "period": "annual", "limit": 2}),
             return_exceptions=True
         )
 
+    # ── Quote & Profile ───────────────────────────────────────────────────────
     q = first(quote_r)
-    p = first(profile_r)
+    p = first(profile_r) if isinstance(profile_r, list) else (profile_r if isinstance(profile_r, dict) else {})
     current_price = q.get("price", 0) or 0
 
-    rsi_history = [{"date": str(r.get("date", ""))[:10], "rsi": round(float(r.get("rsi", 0)), 2)}
-                   for r in (rsi_r if isinstance(rsi_r, list) else [])[:10]]
-    rsi_current = rsi_history[0]["rsi"] if rsi_history else None
-    rsi_dir = ("RISING" if len(rsi_history) >= 3 and rsi_history[0]["rsi"] > rsi_history[2]["rsi"]
-               else "FALLING" if len(rsi_history) >= 3 and rsi_history[0]["rsi"] < rsi_history[2]["rsi"]
-               else "FLAT")
-    rsi_sig = ("OVERSOLD" if rsi_current and rsi_current < 30
-               else "OVERBOUGHT" if rsi_current and rsi_current > 70 else "NEUTRAL" if rsi_current else "N/A")
+    # ── RSI — calculated locally from historical prices ───────────────────────
+    hist_prices = []
+    if isinstance(hist_r, dict) and "historical" in hist_r:
+        hist_prices = [h["close"] for h in hist_r["historical"][:30] if "close" in h]
+    elif isinstance(hist_r, list):
+        hist_prices = [h["close"] for h in hist_r[:30] if "close" in h]
 
+    rsi_history = []
+    if isinstance(hist_r, dict) and "historical" in hist_r:
+        for h in hist_r["historical"][:10]:
+            rsi_history.append({"date": str(h.get("date", ""))[:10], "close": h.get("close")})
+
+    rsi_current = calc_rsi(hist_prices) if len(hist_prices) >= 15 else None
+    rsi_dir = "N/A"
+    if rsi_current and len(hist_prices) >= 17:
+        rsi_prev = calc_rsi(hist_prices[2:]) if len(hist_prices) >= 17 else None
+        if rsi_prev:
+            rsi_dir = "RISING" if rsi_current > rsi_prev else "FALLING" if rsi_current < rsi_prev else "FLAT"
+    rsi_sig = ("OVERSOLD" if rsi_current and rsi_current < 30
+               else "OVERBOUGHT" if rsi_current and rsi_current > 70
+               else "NEUTRAL" if rsi_current else "N/A")
+
+    # ── EPS History ───────────────────────────────────────────────────────────
     eps_history = []
     if isinstance(earnings_r, list):
         for e in earnings_r[:4]:
@@ -205,297 +231,333 @@ async def conviction(symbol: str = Query(...)):
                                  "actual": actual, "beat": beat, "surprise_pct": pct})
     beat_count = sum(1 for e in eps_history if e.get("beat"))
 
+    # ── Revenue Trend ─────────────────────────────────────────────────────────
     revenue_trend = [{"date": str(s.get("date", ""))[:10], "revenue": s.get("revenue"),
                       "grossProfit": s.get("grossProfit"), "operatingIncome": s.get("operatingIncome"),
                       "netIncome": s.get("netIncome"), "eps": s.get("eps")}
                      for s in (income_r if isinstance(income_r, list) else [])[:4]]
 
+    # ── Analyst Grades ────────────────────────────────────────────────────────
     grade_summary = {}
     if isinstance(grades_r, list) and grades_r:
         recent5 = grades_r[:5]
+        upgrades = sum(1 for g in recent5 if g.get("action", "").lower() in ["upgrade", "initiated", "reiterated"])
+        downgrades = sum(1 for g in recent5 if g.get("action", "").lower() == "downgrade")
         grade_summary = {
             "analyst_count": len(set(g.get("gradingCompany", "") for g in grades_r)),
             "recent_grades": [{"company": g.get("gradingCompany"), "grade": g.get("newGrade"),
                                "action": g.get("action"), "date": str(g.get("date", ""))[:10]}
                               for g in recent5],
-            "upgrades_last5": sum(1 for g in recent5 if g.get("action") == "upgraded"),
-            "downgrades_last5": sum(1 for g in recent5 if g.get("action") == "downgraded")
+            "upgrades_last5": upgrades,
+            "downgrades_last5": downgrades
         }
 
+    # ── Price Targets ─────────────────────────────────────────────────────────
     pt_summary = {}
     pt = first(pt_r)
-    if pt and "lastMonthAvgPriceTarget" in pt:
-        avg_pt = pt.get("lastMonthAvgPriceTarget") or pt.get("lastQuarterAvgPriceTarget")
-        upside = round(((avg_pt - current_price) / current_price) * 100, 1) if avg_pt and current_price else None
+    if pt and isinstance(pt, dict) and pt.get("lastMonthAvgPriceTarget"):
         pt_summary = {
             "last_month_avg": pt.get("lastMonthAvgPriceTarget"),
-            "last_month_count": pt.get("lastMonthCount"),
+            "last_month_count": pt.get("lastMonthAvgPriceTargetCount"),
             "last_quarter_avg": pt.get("lastQuarterAvgPriceTarget"),
             "last_year_avg": pt.get("lastYearAvgPriceTarget"),
-            "implied_upside_pct": upside,
+            "implied_upside_pct": round(((pt.get("lastMonthAvgPriceTarget", 0) - current_price) / current_price) * 100, 1) if current_price else None,
             "current_price": current_price,
-            "above_target": current_price >= avg_pt if avg_pt else None
+            "above_target": current_price > (pt.get("lastMonthAvgPriceTarget") or 0)
         }
 
-    insider_summary = agg_insider(insider_r if isinstance(insider_r, list) else [])
+    # ── Key Metrics (annual) ──────────────────────────────────────────────────
+    km = first(metrics_r)
+    key_metrics = {}
+    if km and isinstance(km, dict):
+        key_metrics = {
+            "pe": km.get("peRatio"),
+            "peg": km.get("pegRatio"),
+            "pb": km.get("pbRatio"),
+            "ps": km.get("priceToSalesRatio"),
+            "ev_ebitda": km.get("evToEbitda"),
+            "debt_to_equity": km.get("debtToEquity"),
+            "current_ratio": km.get("currentRatio"),
+            "roe": km.get("roe"),
+            "revenue_per_share": km.get("revenuePerShare"),
+            "period": km.get("period"),
+            "date": str(km.get("date", ""))[:10]
+        }
 
-    score_summary = {}
+    # ── Financial Scores ──────────────────────────────────────────────────────
     sc = first(score_r)
-    if sc and "altmanZScore" in sc:
-        z, f = sc.get("altmanZScore"), sc.get("piotroskiScore")
-        score_summary = {
-            "altman_z": z, "piotroski_f": f,
+    financial_scores = {}
+    if sc and isinstance(sc, dict) and "altmanZScore" in sc:
+        z = sc.get("altmanZScore")
+        f = sc.get("piotroskiScore")
+        financial_scores = {
+            "altman_z": z,
+            "piotroski_f": f,
             "z_zone": "DISTRESS" if z and z < 1.8 else "GREY" if z and z < 3 else "SAFE" if z else "N/A",
             "kill_flag": bool(z and z < 1.8 and f is not None and f <= 2)
         }
 
-    news_articles = [a for a in (news_r if isinstance(news_r, list) else [])
-                     if a.get("symbol", "").upper() == sym]
-    if not news_articles and isinstance(news_r, list):
-        news_articles = news_r
-    news_scan = scan_news(news_articles)
+    # ── Insider ───────────────────────────────────────────────────────────────
+    insider = agg_insider(insider_r)
 
-    km = first(metrics_r)
+    # ── News Scan ─────────────────────────────────────────────────────────────
+    news_result = scan_news(news_r if isinstance(news_r, list) else [])
 
-    c1 = not insider_summary.get("kill_flag", False)
-    c2 = not score_summary.get("kill_flag", False)
-    c3 = grade_summary.get("analyst_count", 0) <= 8 and grade_summary.get("downgrades_last5", 0) < 2
-    c4 = not pt_summary.get("above_target", False)
-    c5 = news_scan.get("pass", True)
-    fails = sum(1 for x in [c1, c2, c3, c4, c5] if not x)
+    # ── Phase 0 Gates ─────────────────────────────────────────────────────────
+    analyst_count = grade_summary.get("analyst_count")
+    downgrades = grade_summary.get("downgrades_last5", 0)
+    pt_upside = pt_summary.get("implied_upside_pct")
+
+    gate_insider = not insider.get("kill_flag", False)
+    gate_balance = not financial_scores.get("kill_flag", False)
+    gate_analyst = analyst_count is None or (analyst_count <= 14 and downgrades == 0)
+    gate_pt = pt_upside is None or pt_upside > 0
+    gate_news = news_result["pass"]
+
+    gates_passed = sum([gate_insider, gate_balance, gate_analyst, gate_pt, gate_news])
 
     return no_cache({
         "symbol": sym,
         "timestamp": datetime.utcnow().isoformat(),
-        "quote": {"price": current_price, "change": q.get("change"),
-                  "changesPercentage": q.get("changePercentage"),
-                  "dayLow": q.get("dayLow"), "dayHigh": q.get("dayHigh"),
-                  "yearLow": q.get("yearLow"), "yearHigh": q.get("yearHigh"),
-                  "volume": q.get("volume"), "avgVolume": q.get("averageVolume"),
-                  "marketCap": q.get("marketCap"),
-                  "priceAvg50": q.get("priceAvg50"), "priceAvg200": q.get("priceAvg200")},
-        "profile": {"name": p.get("companyName"), "sector": p.get("sector"),
-                    "industry": p.get("industry"), "exchange": p.get("exchangeFullName"),
-                    "description": str(p.get("description", ""))[:300],
-                    "ceo": p.get("ceo"), "employees": p.get("fullTimeEmployees"),
-                    "beta": p.get("beta"), "ipoDate": p.get("ipoDate")},
-        "technicals": {"rsi_current": rsi_current, "rsi_direction": rsi_dir,
-                       "rsi_signal": rsi_sig, "rsi_history": rsi_history},
-        "fundamentals": {"pe_forward": km.get("peRatio"), "peg": km.get("pegRatio"),
-                         "price_to_sales": km.get("priceToSalesRatio"),
-                         "price_to_book": km.get("pbRatio"),
-                         "debt_to_equity": km.get("debtToEquity"),
-                         "current_ratio": km.get("currentRatio"),
-                         "roe": km.get("roe"),
-                         "revenue_trend": revenue_trend,
-                         "beat_count": beat_count, "beat_rate": f"{beat_count}/4",
-                         "eps_history": eps_history},
-        "analyst": {"grades": grade_summary, "price_targets": pt_summary},
-        "insider": insider_summary,
-        "financial_scores": score_summary,
-        "news_scan": news_scan,
+        "quote": {
+            "price": current_price,
+            "change": q.get("change"),
+            "changesPercentage": q.get("changesPercentage"),
+            "dayLow": q.get("dayLow"),
+            "dayHigh": q.get("dayHigh"),
+            "yearLow": q.get("yearLow"),
+            "yearHigh": q.get("yearHigh"),
+            "volume": q.get("volume"),
+            "avgVolume": q.get("avgVolume"),
+            "marketCap": q.get("marketCap"),
+            "priceAvg50": q.get("priceAvg50"),
+            "priceAvg200": q.get("priceAvg200"),
+        },
+        "profile": {
+            "name": p.get("companyName"),
+            "sector": p.get("sector"),
+            "industry": p.get("industry"),
+            "exchange": p.get("exchangeShortName"),
+            "description": (p.get("description") or "")[:300],
+            "ceo": p.get("ceo"),
+            "employees": p.get("fullTimeEmployees"),
+            "beta": p.get("beta"),
+            "ipoDate": p.get("ipoDate"),
+        },
+        "technicals": {
+            "rsi_current": rsi_current,
+            "rsi_direction": rsi_dir,
+            "rsi_signal": rsi_sig,
+            "rsi_calculated_from": f"{len(hist_prices)} days of price history",
+            "price_history": rsi_history[:10]
+        },
+        "fundamentals": {
+            "key_metrics": key_metrics,
+            "revenue_trend": revenue_trend,
+            "beat_count": beat_count,
+            "beat_rate": f"{beat_count}/4",
+            "eps_history": eps_history
+        },
+        "analyst": {
+            "grades": grade_summary,
+            "price_targets": pt_summary
+        },
+        "insider": insider,
+        "financial_scores": financial_scores,
+        "news_scan": news_result,
         "phase0_gate": {
-            "gates_passed": 5 - fails, "gates_failed": fails,
-            "overall": "PASS" if fails == 0 else f"FAIL ({fails} gates failed)",
+            "gates_passed": gates_passed,
+            "gates_failed": 5 - gates_passed,
+            "overall": "PASS" if gates_passed >= 4 else f"FAIL ({5-gates_passed} gates failed)",
             "results": {
-                "check1_insider": {"pass": c1, "detail": insider_summary},
-                "check2_balance_sheet": {"pass": c2, "detail": score_summary},
-                "check3_analyst_coverage": {"pass": c3,
-                    "analyst_count": grade_summary.get("analyst_count"),
-                    "downgrades_last5": grade_summary.get("downgrades_last5")},
-                "check4_price_target": {"pass": c4, "detail": pt_summary},
-                "check5_news": {"pass": c5, "detail": news_scan}
+                "check1_insider": {"pass": gate_insider, "detail": insider},
+                "check2_balance_sheet": {"pass": gate_balance, "detail": financial_scores},
+                "check3_analyst_coverage": {"pass": gate_analyst, "analyst_count": analyst_count, "downgrades_last5": downgrades},
+                "check4_price_target": {"pass": gate_pt, "detail": pt_summary},
+                "check5_news": {"pass": gate_news, "detail": news_result}
             }
         }
     })
 
+@app.get("/scan")
+async def scan(symbols: str = Query(...), _key=Depends(verify_key)):
+    tickers = [s.strip().upper() for s in symbols.split(",")]
+    async with httpx.AsyncClient() as client:
+        quotes = await asyncio.gather(*[fmp(client, f"/quote/{t}") for t in tickers])
+        hists = await asyncio.gather(*[fmp(client, f"/historical-price-full/{t}", {"timeseries": 20}) for t in tickers])
+
+    output = []
+    for t, q_r, h_r in zip(tickers, quotes, hists):
+        q = first(q_r)
+        hist_prices = []
+        if isinstance(h_r, dict) and "historical" in h_r:
+            hist_prices = [h["close"] for h in h_r["historical"][:20] if "close" in h]
+        rsi = calc_rsi(hist_prices) if len(hist_prices) >= 15 else None
+        avg_vol = q.get("avgVolume") or 1
+        vol = q.get("volume") or 0
+        output.append({
+            "symbol": t,
+            "price": q.get("price", 0),
+            "change_pct": q.get("changesPercentage"),
+            "volume": vol,
+            "avg_volume": avg_vol,
+            "volume_ratio": round(vol / avg_vol, 2) if avg_vol else None,
+            "rsi": rsi,
+            "rsi_signal": ("OVERSOLD" if rsi and rsi < 30 else "OVERBOUGHT" if rsi and rsi > 70 else "NEUTRAL" if rsi else "N/A"),
+            "year_low": q.get("yearLow"),
+            "year_high": q.get("yearHigh"),
+            "market_cap": q.get("marketCap"),
+        })
+    return no_cache({"timestamp": datetime.utcnow().isoformat(), "count": len(tickers), "data": output})
 
 @app.get("/vet")
-async def vet(symbol: str = Query(...)):
+async def vet(symbol: str = Query(...), _key=Depends(verify_key)):
     sym = symbol.upper()
     async with httpx.AsyncClient() as client:
         insider_r, score_r, grades_r, pt_r, news_r, quote_r = await asyncio.gather(
             fmp(client, "/insider-trading/statistics", {"symbol": sym}),
-            fmp(client, "/financial-scores", {"symbol": sym}),
-            fmp(client, "/grades", {"symbol": sym, "limit": 20}),
+            fmp(client, "/score", {"symbol": sym}),
+            fmp(client, "/grade", {"symbol": sym, "limit": 20}),
             fmp(client, "/price-target-summary", {"symbol": sym}),
-            fmp(client, "/news/stock", {"tickers": sym, "limit": 20}),
-            fmp(client, "/quote", {"symbol": sym}),
+            fmp(client, "/stock_news", {"tickers": sym, "limit": 20}),
+            fmp(client, f"/quote/{sym}"),
+            return_exceptions=True
         )
 
+    insider = agg_insider(insider_r)
+    sc = first(score_r)
+    scores = {}
+    if sc and isinstance(sc, dict) and "altmanZScore" in sc:
+        z, f = sc.get("altmanZScore"), sc.get("piotroskiScore")
+        scores = {"altman_z": z, "piotroski_f": f,
+                  "z_zone": "DISTRESS" if z and z < 1.8 else "GREY" if z and z < 3 else "SAFE",
+                  "kill_flag": bool(z and z < 1.8 and f is not None and f <= 2)}
+
+    analyst_count = None
+    downgrades = 0
+    if isinstance(grades_r, list) and grades_r:
+        analyst_count = len(set(g.get("gradingCompany", "") for g in grades_r))
+        downgrades = sum(1 for g in grades_r[:5] if g.get("action", "").lower() == "downgrade")
+
+    pt = first(pt_r)
     q = first(quote_r)
     current_price = q.get("price", 0) or 0
+    pt_upside = None
+    if pt and pt.get("lastMonthAvgPriceTarget") and current_price:
+        pt_upside = round(((pt["lastMonthAvgPriceTarget"] - current_price) / current_price) * 100, 1)
 
-    insider_summary = agg_insider(insider_r if isinstance(insider_r, list) else [])
-    check1_pass = not insider_summary.get("kill_flag", False)
+    news_result = scan_news(news_r if isinstance(news_r, list) else [])
 
-    sc = first(score_r)
-    score_detail = {}
-    check2_pass = True
-    if sc and "altmanZScore" in sc:
-        z, f = sc.get("altmanZScore"), sc.get("piotroskiScore")
-        check2_pass = not (z and z < 1.8 and f is not None and f <= 2)
-        score_detail = {"altman_z": z, "piotroski_f": f,
-                        "z_zone": "DISTRESS" if z and z < 1.8 else "GREY" if z and z < 3 else "SAFE"}
+    gate1 = not insider.get("kill_flag", False)
+    gate2 = not scores.get("kill_flag", False)
+    gate3 = analyst_count is None or (analyst_count <= 14 and downgrades == 0)
+    gate4 = pt_upside is None or pt_upside > 0
+    gate5 = news_result["pass"]
+    passed = sum([gate1, gate2, gate3, gate4, gate5])
 
-    grade_detail = {}
-    check3_pass = True
-    if isinstance(grades_r, list) and grades_r:
-        count = len(set(g.get("gradingCompany", "") for g in grades_r))
-        recent5 = grades_r[:5]
-        downs = sum(1 for g in recent5 if g.get("action") == "downgraded")
-        check3_pass = count <= 8 and downs < 2
-        grade_detail = {"analyst_count": count, "downgrades_last5": downs,
-                        "recent": [{"company": g.get("gradingCompany"), "grade": g.get("newGrade"),
-                                    "action": g.get("action")} for g in recent5[:3]]}
-
-    pt_detail = {}
-    check4_pass = True
-    pt = first(pt_r)
-    if pt and "lastMonthAvgPriceTarget" in pt:
-        avg_pt = pt.get("lastMonthAvgPriceTarget") or pt.get("lastQuarterAvgPriceTarget")
-        check4_pass = not (avg_pt and current_price >= avg_pt)
-        upside = round(((avg_pt - current_price) / current_price) * 100, 1) if avg_pt and current_price else None
-        pt_detail = {"avg_pt": avg_pt, "current_price": current_price,
-                     "implied_upside_pct": upside, "above_target": not check4_pass}
-
-    news_articles = [a for a in (news_r if isinstance(news_r, list) else [])
-                     if a.get("symbol", "").upper() == sym]
-    if not news_articles and isinstance(news_r, list):
-        news_articles = news_r
-    news_scan = scan_news(news_articles)
-
-    kills = []
-    if not check1_pass: kills.append(f"check1_insider: Net sellers {insider_summary.get('sell_pct')}%")
-    if not check2_pass: kills.append("check2_balance_sheet: Z<1.8 AND F≤2")
-    if not check3_pass: kills.append(f"check3_analyst: {grade_detail.get('analyst_count')} analysts or 2+ downgrades")
-    if not check4_pass: kills.append("check4_price_target: Price at or above PT")
-    if not news_scan["pass"]:
-        kills.append(f"check5_news: '{news_scan['flags'][0]['keyword']}' — {news_scan['flags'][0]['headline'][:60]}")
-
-    return {
-        "symbol": sym, "timestamp": datetime.utcnow().isoformat(),
+    return no_cache({
+        "symbol": sym,
+        "timestamp": datetime.utcnow().isoformat(),
         "price": current_price,
-        "overall": "PASS" if not kills else f"KILL — {kills[0]}",
-        "kills": kills,
-        "checks": {
-            "check1_insider": {"pass": check1_pass, "detail": insider_summary},
-            "check2_balance_sheet": {"pass": check2_pass, "detail": score_detail},
-            "check3_analyst_coverage": {"pass": check3_pass, "detail": grade_detail},
-            "check4_price_target": {"pass": check4_pass, "detail": pt_detail},
-            "check5_news": {"pass": news_scan["pass"], "flags": news_scan.get("flags", [])},
-            "check6_spec_gap": {"pass": None, "note": "Manual — Claude handles via web search"}
+        "phase0_gate": {
+            "overall": "PASS" if passed >= 4 else f"FAIL ({5-passed} gates failed)",
+            "gates_passed": passed,
+            "check1_insider": {"pass": gate1, "detail": insider},
+            "check2_balance_sheet": {"pass": gate2, "detail": scores},
+            "check3_analyst": {"pass": gate3, "analyst_count": analyst_count, "downgrades": downgrades},
+            "check4_price_target": {"pass": gate4, "implied_upside_pct": pt_upside,
+                                    "avg_pt": pt.get("lastMonthAvgPriceTarget") if pt else None},
+            "check5_news": {"pass": gate5, "detail": news_result}
         }
-    }
+    })
 
-
-@app.get("/scan")
-async def scan(symbols: str = Query(...)):
-    tickers = [s.strip().upper() for s in symbols.split(",")]
+@app.get("/financials")
+async def financials(symbol: str = Query(...), period: str = Query(default="annual"),
+                     limit: int = Query(default=4), _key=Depends(verify_key)):
+    sym = symbol.upper()
     async with httpx.AsyncClient() as client:
-        q_tasks = [fmp(client, "/quote", {"symbol": t}) for t in tickers]
-        r_tasks = [fmp(client, "/technical-indicators/rsi",
-                       {"symbol": t, "periodLength": 14, "timeframe": "1day", "limit": 3})
-                   for t in tickers]
-        all_r = await asyncio.gather(*q_tasks, *r_tasks, return_exceptions=True)
+        income_r, balance_r, cashflow_r, scores_r, earnings_r, metrics_r = await asyncio.gather(
+            fmp(client, "/income-statement", {"symbol": sym, "period": period, "limit": limit}),
+            fmp(client, "/balance-sheet-statement", {"symbol": sym, "period": period, "limit": limit}),
+            fmp(client, "/cash-flow-statement", {"symbol": sym, "period": period, "limit": limit}),
+            fmp(client, "/score", {"symbol": sym}),
+            fmp(client, "/earnings-surprises", {"symbol": sym, "limit": 8}),
+            fmp(client, "/key-metrics", {"symbol": sym, "period": "annual", "limit": limit}),
+        )
 
-    q_results, rsi_results = all_r[:len(tickers)], all_r[len(tickers):]
-    output = {}
-    for i, t in enumerate(tickers):
-        q = first(q_results[i])
-        rsi_d = rsi_results[i]
-        rsi = round(float(rsi_d[0].get("rsi", 0)), 1) if isinstance(rsi_d, list) and rsi_d else None
-        vol = q.get("volume", 0) or 0
-        avg_vol = q.get("averageVolume", 0) or 0
-        vol_ratio = round(vol / avg_vol, 2) if avg_vol > 0 else None
-        output[t] = {
-            "price": q.get("price"), "change_pct": q.get("changePercentage"),
-            "day_range": f"{q.get('dayLow')}–{q.get('dayHigh')}",
-            "year_range": f"{q.get('yearLow')}–{q.get('yearHigh')}",
-            "volume": vol, "avg_volume": avg_vol, "volume_ratio": vol_ratio,
-            "volume_signal": ("HIGH" if vol_ratio and vol_ratio > 1.5
-                              else "LOW" if vol_ratio and vol_ratio < 0.5 else "NORMAL"),
-            "market_cap": q.get("marketCap"), "rsi": rsi,
-            "rsi_signal": ("OVERSOLD" if rsi and rsi < 30 else "OVERBOUGHT" if rsi and rsi > 70
-                           else "NEUTRAL" if rsi else "N/A")
-        }
-    return no_cache({"timestamp": datetime.utcnow().isoformat(), "count": len(tickers), "data": output})
+    eps_history = []
+    if isinstance(earnings_r, list):
+        for e in earnings_r[:4]:
+            actual, est = e.get("actualEarningResult"), e.get("estimatedEarning")
+            beat = actual >= est if actual is not None and est is not None else None
+            pct = round(((actual - est) / abs(est)) * 100, 1) if beat is not None and est != 0 else None
+            eps_history.append({"date": str(e.get("date", ""))[:10], "estimated": est,
+                                 "actual": actual, "beat": beat, "surprise_pct": pct})
 
+    sc = first(scores_r)
+    score_summary = {}
+    if sc and isinstance(sc, dict) and "altmanZScore" in sc:
+        z, f = sc.get("altmanZScore"), sc.get("piotroskiScore")
+        score_summary = {"altman_z": z, "piotroski_f": f,
+                         "z_zone": "DISTRESS" if z and z < 1.8 else "GREY" if z and z < 3 else "SAFE",
+                         "kill_flag": bool(z and z < 1.8 and f is not None and f <= 2)}
+
+    return no_cache({
+        "symbol": sym, "period": period,
+        "timestamp": datetime.utcnow().isoformat(),
+        "income_statement": income_r if isinstance(income_r, list) else [],
+        "balance_sheet": balance_r if isinstance(balance_r, list) else [],
+        "cash_flow": cashflow_r if isinstance(cashflow_r, list) else [],
+        "key_metrics": metrics_r if isinstance(metrics_r, list) else [],
+        "financial_scores": score_summary,
+        "eps_history": eps_history,
+        "beat_rate": f"{sum(1 for e in eps_history if e.get('beat'))}/4"
+    })
 
 @app.get("/watchlist")
 async def watchlist(_key=Depends(verify_key)):
-    """Live watchlist — zones and metadata fetched from GitHub Gist, prices from FMP."""
-    wl_data = await fetch_watchlist_data()
+    wl = await fetch_watchlist_data()
+    if not wl or "tickers" not in wl:
+        return no_cache({"error": "Watchlist unavailable", "timestamp": datetime.utcnow().isoformat()})
 
-    if "error" in wl_data:
-        return {"error": f"Could not fetch watchlist from Gist: {wl_data['error']}"}
-
-    tickers_meta = wl_data.get("tickers", {})
-    tickers = [t for t in tickers_meta.keys() if tickers_meta[t].get("z1") or tickers_meta[t].get("notes") != "TBD-AV"]
-
-    if not tickers:
-        return {"error": "No tickers found in Gist", "raw": wl_data}
+    tickers_data = wl.get("tickers", {})
+    symbols = list(tickers_data.keys())
 
     async with httpx.AsyncClient() as client:
-        q_tasks = [fmp(client, "/quote", {"symbol": t}) for t in tickers]
-        r_tasks = [fmp(client, "/technical-indicators/rsi",
-                       {"symbol": t, "periodLength": 14, "timeframe": "1day", "limit": 3})
-                   for t in tickers]
-        all_r = await asyncio.gather(*q_tasks, *r_tasks, return_exceptions=True)
+        quotes = await asyncio.gather(*[fmp(client, f"/quote/{s}") for s in symbols])
 
-    q_results, rsi_results = all_r[:len(tickers)], all_r[len(tickers):]
-    output = {}
+    output = []
+    for sym, q_r in zip(symbols, quotes):
+        q = first(q_r)
+        price = q.get("price", 0) or 0
+        entry = tickers_data.get(sym, {})
+        z1 = entry.get("z1", [None, None])
+        z2 = entry.get("z2")
+        stop = entry.get("stop")
+        t1 = entry.get("t1")
+        t2 = entry.get("t2")
 
-    for i, t in enumerate(tickers):
-        q = first(q_results[i])
-        price = q.get("price")
-        rsi_d = rsi_results[i]
-        rsi = round(float(rsi_d[0].get("rsi", 0)), 1) if isinstance(rsi_d, list) and rsi_d else None
+        in_z1 = z1 and len(z1) == 2 and z1[0] <= price <= z1[1]
+        in_z2 = z2 and isinstance(z2, list) and len(z2) == 2 and z2[0] <= price <= z2[1]
+        below_stop = stop and price < stop
+        zone = "Z1 ✅" if in_z1 else "Z2 ✅" if in_z2 else "BELOW STOP ⚠️" if below_stop else "WATCHING"
 
-        meta = tickers_meta.get(t, {})
-        z1 = meta.get("z1")
-        z2 = meta.get("z2")
-        stop = meta.get("stop")
-        t1 = meta.get("t1")
-        t2 = meta.get("t2")
+        upside_t1 = round(((t1 - price) / price) * 100, 1) if t1 and price else None
+        upside_t2 = round(((t2 - price) / price) * 100, 1) if t2 and price else None
 
-        in_z1 = bool(z1 and price and z1[0] <= price <= z1[1])
-        below_z1 = bool(z1 and price and price < z1[0])
-        at_z2 = bool(z2 and price and price >= z2)
+        output.append({
+            "symbol": sym, "price": price,
+            "change_pct": q.get("changesPercentage"),
+            "zone": zone,
+            "z1_range": z1, "z2_trigger": z2,
+            "stop": stop, "t1": t1, "t2": t2,
+            "upside_t1_pct": upside_t1, "upside_t2_pct": upside_t2,
+            "tier": entry.get("tier"), "notes": entry.get("notes", ""),
+        })
 
-        if in_z1:
-            status = "🟢 Z1 IN ZONE — full size entry"
-        elif at_z2:
-            status = "🔵 Z2 BREAKOUT — half size, confirm volume"
-        elif below_z1:
-            status = "⬇️ BELOW Z1 — wait"
-        elif z1 and price and price > z1[1]:
-            status = "⬆️ ABOVE Z1 — watch for Z2 coil"
-        else:
-            status = "TBD — AV pending"
-
-        output[t] = {
-            "price": price,
-            "change_pct": q.get("changePercentage"),
-            "rsi": rsi,
-            "rsi_signal": ("OVERSOLD" if rsi and rsi < 30 else "OVERBOUGHT" if rsi and rsi > 70
-                           else "NEUTRAL" if rsi else "N/A"),
-            "z1_entry": f"${z1[0]}–${z1[1]}" if z1 else "TBD-AV",
-            "z2_trigger": f"${z2}+" if z2 else "none",
-            "stop": f"${stop}" if stop else "TBD",
-            "t1": f"${t1}" if t1 else "TBD",
-            "t2": f"${t2}" if t2 else "TBD",
-            "tier": meta.get("tier", "TBD"),
-            "notes": meta.get("notes", ""),
-            "in_z1": in_z1,
-            "at_z2": at_z2,
-            "status": status
-        }
-
-    return {
+    return no_cache({
         "timestamp": datetime.utcnow().isoformat(),
-        "gist_updated": wl_data.get("updated", "unknown"),
-        "z1_in_zone": sum(1 for v in output.values() if v.get("in_z1")),
-        "z2_breakout": sum(1 for v in output.values() if v.get("at_z2")),
+        "updated": wl.get("updated"),
+        "count": len(output),
         "watchlist": output
-    }
+    })
