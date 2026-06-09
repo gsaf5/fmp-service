@@ -109,20 +109,26 @@ async def root():
     from fastapi.responses import HTMLResponse
     html = """<!DOCTYPE html>
 <html>
-<head><title>Claude Market API</title>
-<meta name="description" content="Live market data proxy at https://web-production-7e4e6.up.railway.app">
+<head>
+<title>mktpxdata72.com - Claude Market API</title>
+<meta name="description" content="mktpxdata72.com - Live FMP market data proxy for conviction scoring and portfolio scans. Endpoints: /quote /conviction /financials /scan /vet /watchlist">
 </head>
 <body>
-<h1>Claude Market API</h1>
-<p>Base URL: <strong>https://web-production-7e4e6.up.railway.app</strong></p>
+<h1>mktpxdata72.com - Claude Market API</h1>
+<p>Live FMP data proxy for conviction scoring and portfolio scans.</p>
+<p>Primary URL: <strong><a href="https://mktpxdata72.com">https://mktpxdata72.com</a></strong></p>
+<p>Backup URL: <strong>https://web-production-7e4e6.up.railway.app</strong></p>
+<h2>Endpoints</h2>
 <ul>
-<li><a href="https://web-production-7e4e6.up.railway.app/ping">https://web-production-7e4e6.up.railway.app/ping</a></li>
-<li><a href="https://web-production-7e4e6.up.railway.app/quote?symbols=NVDA">https://web-production-7e4e6.up.railway.app/quote?symbols=NVDA</a></li>
-<li><a href="https://web-production-7e4e6.up.railway.app/conviction?symbol=NVDA">https://web-production-7e4e6.up.railway.app/conviction?symbol=NVDA</a></li>
-<li><a href="https://web-production-7e4e6.up.railway.app/vet?symbol=NVDA">https://web-production-7e4e6.up.railway.app/vet?symbol=NVDA</a></li>
-<li><a href="https://web-production-7e4e6.up.railway.app/scan?symbols=NVDA">https://web-production-7e4e6.up.railway.app/scan?symbols=NVDA</a></li>
-<li><a href="https://web-production-7e4e6.up.railway.app/watchlist">https://web-production-7e4e6.up.railway.app/watchlist</a></li>
+<li><a href="https://mktpxdata72.com/ping">https://mktpxdata72.com/ping</a> — health check (no auth)</li>
+<li><a href="https://mktpxdata72.com/quote?symbols=NVDA">https://mktpxdata72.com/quote?symbols=NVDA</a> — live batch quotes</li>
+<li><a href="https://mktpxdata72.com/conviction?symbol=NVDA">https://mktpxdata72.com/conviction?symbol=NVDA</a> — full conviction data</li>
+<li><a href="https://mktpxdata72.com/financials?symbol=NVDA">https://mktpxdata72.com/financials?symbol=NVDA</a> — quarterly financials</li>
+<li><a href="https://mktpxdata72.com/scan?symbols=NVDA,AAPL">https://mktpxdata72.com/scan?symbols=NVDA,AAPL</a> — RSI + price scan</li>
+<li><a href="https://mktpxdata72.com/vet?symbol=NVDA">https://mktpxdata72.com/vet?symbol=NVDA</a> — Phase 0 vetting gate</li>
+<li><a href="https://mktpxdata72.com/watchlist">https://mktpxdata72.com/watchlist</a> — watchlist with zone status</li>
 </ul>
+<p>All endpoints except /ping require header: x-api-key</p>
 </body>
 </html>"""
     return HTMLResponse(content=html)
