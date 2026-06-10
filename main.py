@@ -135,7 +135,7 @@ async def fetch_watchlist_data():
 # ── Routes ────────────────────────────────────────────────────────────────────
 @app.get("/ping")
 async def ping():
-    return {"status": "ok", "service": "Claude Market API v5.0",
+    return {"status": "ok", "service": "Claude Market API v5.1",
             "ts": datetime.utcnow().isoformat()}
 
 @app.get("/")
