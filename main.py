@@ -150,11 +150,13 @@ async def root():
 <p>Backup: <a href="https://web-production-7e4e6.up.railway.app">https://web-production-7e4e6.up.railway.app</a></p>
 <ul>
 <li><a href="https://mktpxdata72.com/ping">https://mktpxdata72.com/ping</a></li>
-<li><a href="https://web-production-7e4e6.up.railway.app/conviction?symbol=RKLB">https://web-production-7e4e6.up.railway.app/conviction?symbol=RKLB</a></li>
-<li><a href="https://web-production-7e4e6.up.railway.app/quote?symbols=RKLB,ASTS">https://web-production-7e4e6.up.railway.app/quote?symbols=RKLB,ASTS</a></li>
-<li><a href="https://web-production-7e4e6.up.railway.app/scan?symbols=RKLB,ASTS,KTOS">https://web-production-7e4e6.up.railway.app/scan?symbols=RKLB,ASTS,KTOS</a></li>
-<li><a href="https://web-production-7e4e6.up.railway.app/vet?symbol=RKLB">https://web-production-7e4e6.up.railway.app/vet?symbol=RKLB</a></li>
-<li><a href="https://web-production-7e4e6.up.railway.app/watchlist">https://web-production-7e4e6.up.railway.app/watchlist</a></li>
+<li><a href="https://mktpxdata72.com/conviction?symbol=RKLB">https://mktpxdata72.com/conviction?symbol=RKLB</a></li>
+<li><a href="https://mktpxdata72.com/conviction?symbol=ASTS">https://mktpxdata72.com/conviction?symbol=ASTS</a></li>
+<li><a href="https://mktpxdata72.com/quote?symbols=RKLB,ASTS,KTOS,NVDA,MSFT">https://mktpxdata72.com/quote?symbols=RKLB,ASTS,KTOS,NVDA,MSFT</a></li>
+<li><a href="https://mktpxdata72.com/scan?symbols=RKLB,ASTS,KTOS">https://mktpxdata72.com/scan?symbols=RKLB,ASTS,KTOS</a></li>
+<li><a href="https://mktpxdata72.com/vet?symbol=RKLB">https://mktpxdata72.com/vet?symbol=RKLB</a></li>
+<li><a href="https://mktpxdata72.com/financials?symbol=RKLB">https://mktpxdata72.com/financials?symbol=RKLB</a></li>
+<li><a href="https://mktpxdata72.com/watchlist">https://mktpxdata72.com/watchlist</a></li>
 </ul>
 </body></html>"""
     return HTMLResponse(content=html)
