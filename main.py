@@ -18,8 +18,9 @@ app.add_middleware(
 )
 
 API_SECRET = os.environ.get("API_SECRET", "")
-async def verify_key(x_api_key: str = Header(default=None)):
-    if API_SECRET and x_api_key != API_SECRET:
+async def verify_key(x_api_key: str = Header(default=None), apikey: str = Query(default=None)):
+    key = x_api_key or apikey
+    if API_SECRET and key != API_SECRET:
         raise HTTPException(status_code=401, detail="Unauthorized")
 
 FMP_KEY  = os.environ.get("FMP_API_KEY", "")
