@@ -1628,6 +1628,12 @@ async def discovery_scan(
         # ── HARD KILLS — applied before scoring ─────────────────────────────
         kill_reason = None
 
+        # Pull live volume from momentum_map (batch-fetched from /quote)
+        quote_data  = momentum_map.get(sym, {})
+        avg_vol_live = quote_data.get("avgVolume") or uni.get("avgVolume") or 0
+        vol_live     = quote_data.get("volume") or uni.get("volume") or 0
+        exchange_live = (quote_data.get("exchange") or uni.get("exchangeShortName") or "").upper()
+
         # 1. Penny stock
         if price_val > 0 and price_val < 1.00:
             kill_reason = "penny_stock"
@@ -1640,13 +1646,20 @@ async def discovery_scan(
         # 4. Market cap below floor
         elif mktcap_val < 50_000_000:
             kill_reason = "mktcap_too_small"
-        # 5. ALREADY RAN — 3M momentum > threshold (discovery too late)
+        # 5. DEAD TICKER — avg volume < 10,000 (private, delisted, or zombie)
+        #    This kills OTC names that went private but still exist in FMP database
+        elif avg_vol_live > 0 and avg_vol_live < 10000:
+            kill_reason = f"dead_ticker_avgvol_{avg_vol_live:.0f}"
+        # 6. UNTRADEABLE EXCHANGE — Pink Sheets / Expert Market / Grey Market
+        elif exchange_live and any(x in exchange_live for x in ["PINK", "EXPERT", "GREY", "OTC"]):
+            kill_reason = f"untradeable_exchange_{exchange_live}"
+        # 7. ALREADY RAN — 3M momentum > threshold (discovery too late)
         elif m3_val > maxMomentum3M:
             kill_reason = f"already_ran_3M+{m3_val:.1f}pct"
-        # 6. OVERBOUGHT — RSI proxy > threshold
+        # 8. OVERBOUGHT — RSI proxy > threshold
         elif rsi_val > maxRsi:
             kill_reason = f"overbought_rsi{rsi_val:.0f}"
-        # 7. IPO < N months old (base-effect revenue distortion)
+        # 9. IPO < N months old (base-effect revenue distortion)
         elif ipo_date:
             try:
                 from datetime import datetime as dt2
@@ -1685,6 +1698,8 @@ async def discovery_scan(
             "momentum_1M":      sp.get("momentum_1M"),
             "momentum_3M":      sp.get("momentum_3M"),
             "vol_ratio":        sp.get("vol_ratio"),
+            "avg_volume":       avg_vol_live,
+            "exchange":         exchange_live,
         })
 
     # Sort by composite score descending
@@ -1722,6 +1737,8 @@ async def discovery_scan(
             "OUTPUT_penny":          "price < $1.00",
             "OUTPUT_beta":           "|beta| > 10",
             "OUTPUT_rev_artifact":   "any QoQ > 10,000%",
+            "OUTPUT_dead_ticker":    "avgVolume < 10,000 — private/delisted/zombie",
+            "OUTPUT_bad_exchange":   "PINK/EXPERT/GREY/OTC exchange — untradeable",
             "OUTPUT_overbought":     f"RSI proxy > {maxRsi}",
         },
         "filters": {
