@@ -967,6 +967,9 @@ async def discovery_scan(
     minInflection: int = Query(default=2),   # min inflection score to survive cut
     minSpring: int = Query(default=2),        # min spring score to appear in output
     maxNames: int = Query(default=200),       # cap universe before detailed scan
+    maxMomentum3M: float = Query(default=40.0),  # kill if already ran (3M% > this)
+    maxRsi: float = Query(default=65.0),         # kill if overbought (RSI proxy > this)
+    minIpoMonths: int = Query(default=12),        # kill if IPO < N months ago
     _key=Depends(verify_key)
 ):
     """
@@ -1289,23 +1292,47 @@ async def discovery_scan(
         if sscore < minSpring and not cluster and iscore < 3:
             continue
 
-        price_val = sp.get("price") or uni.get("price") or 0
-        beta_val  = uni.get("beta") or 0
-        rev_pcts  = f.get("revenue_pcts", [])
-
-        # ── HARD KILLS ──────────────────────────────────────────────────────
-        # 1. Penny stock: price < $1.00
-        if price_val > 0 and price_val < 1.00:
-            continue
-        # 2. Absurd beta: |beta| > 10 (data artifact)
-        if abs(beta_val) > 10:
-            continue
-        # 3. Revenue QoQ data artifact: any single quarter > 10,000% (base effect distortion)
-        if rev_pcts and any(abs(r) > 10000 for r in rev_pcts):
-            continue
-        # 4. Market cap too thin: under $50M (screener sometimes returns stale data)
+        price_val  = sp.get("price") or uni.get("price") or 0
+        beta_val   = uni.get("beta") or 0
+        rev_pcts   = f.get("revenue_pcts", [])
         mktcap_val = uni.get("marketCap") or 0
-        if mktcap_val < 50_000_000:
+        m3_val     = sp.get("momentum_3M") or 0
+        rsi_val    = sp.get("rsi_proxy") or 50
+        ipo_date   = uni.get("ipoDate") or ""
+
+        # ── HARD KILLS — applied before scoring ─────────────────────────────
+        kill_reason = None
+
+        # 1. Penny stock
+        if price_val > 0 and price_val < 1.00:
+            kill_reason = "penny_stock"
+        # 2. Absurd beta (data artifact)
+        elif abs(beta_val) > 10:
+            kill_reason = "absurd_beta"
+        # 3. Revenue QoQ data artifact (base-effect distortion)
+        elif rev_pcts and any(abs(r) > 10000 for r in rev_pcts):
+            kill_reason = "rev_artifact"
+        # 4. Market cap below floor
+        elif mktcap_val < 50_000_000:
+            kill_reason = "mktcap_too_small"
+        # 5. ALREADY RAN — 3M momentum > threshold (discovery too late)
+        elif m3_val > maxMomentum3M:
+            kill_reason = f"already_ran_3M+{m3_val:.1f}pct"
+        # 6. OVERBOUGHT — RSI proxy > threshold
+        elif rsi_val > maxRsi:
+            kill_reason = f"overbought_rsi{rsi_val:.0f}"
+        # 7. IPO < N months old (base-effect revenue distortion)
+        elif ipo_date:
+            try:
+                from datetime import datetime as dt2
+                ipo_dt = dt2.strptime(ipo_date[:10], "%Y-%m-%d")
+                months_public = (datetime.utcnow() - ipo_dt).days / 30
+                if months_public < minIpoMonths:
+                    kill_reason = f"ipo_too_recent_{months_public:.0f}mo"
+            except Exception:
+                pass
+
+        if kill_reason:
             continue
 
         flagged.append({
@@ -1344,12 +1371,21 @@ async def discovery_scan(
         "timestamp":       start_ts.isoformat(),
         "elapsed_seconds": elapsed,
         "pipeline_summary": {
-            "universe_total":       len(universe_raw),
+            "universe_total":          len(universe_raw),
             "universe_after_cef_kill": len(filtered_raw),
-            "universe_scanned":     len(symbols),
-            "survivors_stage2":     len(survivors),
-            "flagged_output":       len(flagged),
-            "cap_range_scanned":    f"${(universe[0].get('marketCap') or 0)/1e6:.0f}M – ${(universe[-1].get('marketCap') or 0)/1e6:.0f}M" if universe else "n/a",
+            "universe_scanned":        len(symbols),
+            "survivors_stage2":        len(survivors),
+            "flagged_output":          len(flagged),
+            "cap_range_scanned":       f"${(universe[0].get('marketCap') or 0)/1e6:.0f}M – ${(universe[-1].get('marketCap') or 0)/1e6:.0f}M" if universe else "n/a",
+        },
+        "hard_kill_rules": {
+            "penny_stock":      "price < $1.00",
+            "absurd_beta":      "|beta| > 10",
+            "rev_artifact":     "any QoQ > 10,000%",
+            "mktcap_floor":     "mktcap < $50M",
+            "already_ran":      "3M momentum > 40%",
+            "overbought":       "RSI proxy > 65",
+            "ipo_too_recent":   "IPO < 12 months ago",
         },
         "filters": {
             "marketCap":       f"${marketCapMin/1e6:.0f}M–${marketCapMax/1e6:.0f}M",
