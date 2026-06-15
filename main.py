@@ -532,7 +532,7 @@ async def discovery_screener_test(_key=Depends(verify_key)):
     }
     results = {}
     async with httpx.AsyncClient() as client:
-        for path in ["stock-screener", "screener", "company-screener"]:
+        for path in ["company-screener", "stock-screener", "screener"]:
             r = await fmp(client, path, test_params)
             if isinstance(r, list) and len(r) > 0:
                 results[path] = {"status": "WORKING", "sample_count": len(r),
@@ -558,6 +558,11 @@ async def discovery_universe(
     marketCapMin: int = Query(default=50000000),
     marketCapMax: int = Query(default=2000000000),
     profitableOnly: bool = Query(default=True),
+    sector: str = Query(default=None),
+    exchange: str = Query(default=None),
+    betaMax: float = Query(default=None),
+    betaMin: float = Query(default=None),
+    limit: int = Query(default=1000),
     _key=Depends(verify_key)
 ):
     """
@@ -574,25 +579,14 @@ async def discovery_universe(
         }
         if profitableOnly:
             params["netIncomeMoreThan"] = 0
-        # Try known FMP stable screener paths in order
-        r = None
-        last_error = None
-        for path in ["stock-screener", "screener", "company-screener"]:
-            candidate = await fmp(client, path, params)
-            if isinstance(candidate, list):
-                r = candidate
-                break
-            elif isinstance(candidate, dict) and "error" not in candidate:
-                r = candidate
-                break
-            else:
-                last_error = candidate.get("error", str(candidate)) if isinstance(candidate, dict) else str(candidate)
-        if r is None:
-            return no_cache({
-                "error": f"All screener paths failed. Last error: {last_error}",
-                "paths_tried": ["stock-screener", "screener", "company-screener"],
-                "timestamp": datetime.utcnow().isoformat()
-            })
+        if sector:
+            params["sector"] = sector
+        if exchange:
+            params["exchange"] = exchange
+        if limit:
+            params["limit"] = limit
+        # Confirmed working path: company-screener (validated 2026-06-16)
+        r = await fmp(client, "company-screener", params)
 
     if isinstance(r, dict) and "error" in r:
         return no_cache({"error": r["error"], "timestamp": datetime.utcnow().isoformat()})
@@ -603,6 +597,12 @@ async def discovery_universe(
 
     simplified = []
     for s in results:
+        beta = s.get("beta")
+        # Post-filter by beta range if specified
+        if betaMin is not None and (beta is None or beta < betaMin):
+            continue
+        if betaMax is not None and (beta is None or beta > betaMax):
+            continue
         simplified.append({
             "symbol":    s.get("symbol"),
             "name":      s.get("companyName"),
@@ -610,7 +610,7 @@ async def discovery_universe(
             "industry":  s.get("industry"),
             "marketCap": s.get("marketCap"),
             "price":     s.get("price"),
-            "beta":      s.get("beta"),
+            "beta":      beta,
             "exchange":  s.get("exchangeShortName"),
         })
 
@@ -620,6 +620,9 @@ async def discovery_universe(
         "filters_applied": {
             "marketCap":     f"${marketCapMin/1e6:.0f}M–${marketCapMax/1e6:.0f}M",
             "profitableOnly": profitableOnly,
+            "sector":        sector or "ALL",
+            "exchange":      exchange or "ALL",
+            "betaRange":     f"{betaMin or 'any'}–{betaMax or 'any'}",
             "country":       "US",
             "etf":           False
         },
