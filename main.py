@@ -514,6 +514,356 @@ async def financials(symbol: str = Query(...), period: str = Query(default="annu
         "beat_rate": f"{sum(1 for e in eps_history if e.get('beat'))}/{len(eps_history)}"
     })
 
+
+# ── NEW DISCOVERY ROUTES ──────────────────────────────────────────────────────
+
+@app.get("/discovery/universe")
+async def discovery_universe(
+    marketCapMin: int = Query(default=50000000),
+    marketCapMax: int = Query(default=2000000000),
+    profitableOnly: bool = Query(default=True),
+    _key=Depends(verify_key)
+):
+    """
+    Universe Gate: Returns micro/small cap US stocks ($50M–$2B) filtered by profitability.
+    This is the foundational pool for all discovery engines.
+    """
+    async with httpx.AsyncClient() as client:
+        params = {
+            "marketCapMoreThan": marketCapMin,
+            "marketCapLowerThan": marketCapMax,
+            "isEtf": "false",
+            "isActivelyTrading": "true",
+            "country": "US",
+        }
+        if profitableOnly:
+            params["netIncomeMoreThan"] = 0
+        r = await fmp(client, "screener", params)
+
+    if isinstance(r, dict) and "error" in r:
+        return no_cache({"error": r["error"], "timestamp": datetime.utcnow().isoformat()})
+
+    results = r if isinstance(r, list) else []
+    # Sort by market cap ascending (smallest first — better discovery targets)
+    results.sort(key=lambda x: x.get("marketCap") or 0)
+
+    simplified = []
+    for s in results:
+        simplified.append({
+            "symbol":    s.get("symbol"),
+            "name":      s.get("companyName"),
+            "sector":    s.get("sector"),
+            "industry":  s.get("industry"),
+            "marketCap": s.get("marketCap"),
+            "price":     s.get("price"),
+            "beta":      s.get("beta"),
+            "exchange":  s.get("exchangeShortName"),
+        })
+
+    return no_cache({
+        "timestamp":      datetime.utcnow().isoformat(),
+        "total_in_pool":  len(simplified),
+        "filters_applied": {
+            "marketCap":     f"${marketCapMin/1e6:.0f}M–${marketCapMax/1e6:.0f}M",
+            "profitableOnly": profitableOnly,
+            "country":       "US",
+            "etf":           False
+        },
+        "universe": simplified
+    })
+
+
+@app.get("/discovery/fundamentals")
+async def discovery_fundamentals(symbol: str = Query(...), _key=Depends(verify_key)):
+    """
+    Fundamental Inflection Engine: Checks for revenue acceleration, margin expansion,
+    and FCF inflection across last 4 quarters. Used to identify Tier 2 diamonds.
+    """
+    sym = symbol.upper()
+    async with httpx.AsyncClient() as client:
+        income_r, cashflow_r, growth_r = await asyncio.gather(
+            fmp(client, "income-statement",    {"symbol": sym, "period": "quarter", "limit": 6}),
+            fmp(client, "cash-flow-statement", {"symbol": sym, "period": "quarter", "limit": 6}),
+            fmp(client, "financial-growth",    {"symbol": sym, "period": "quarter", "limit": 4}),
+            return_exceptions=True
+        )
+
+    # Revenue acceleration: QoQ growth rate increasing
+    revenue_accel = False
+    margin_expansion = False
+    fcf_positive = False
+    fcf_first_positive = False
+    revenue_pcts = []
+    gross_margins = []
+
+    if isinstance(income_r, list) and len(income_r) >= 3:
+        quarters = income_r[:5]
+        for i in range(len(quarters) - 1):
+            curr_rev = quarters[i].get("revenue") or 0
+            prev_rev = quarters[i+1].get("revenue") or 1
+            if prev_rev != 0:
+                pct = ((curr_rev - prev_rev) / abs(prev_rev)) * 100
+                revenue_pcts.append(round(pct, 1))
+            gm = quarters[i].get("grossProfitRatio") or 0
+            gross_margins.append(round(gm * 100, 2))
+
+        # Revenue acceleration: latest QoQ > prior QoQ by 5%+
+        if len(revenue_pcts) >= 2:
+            revenue_accel = revenue_pcts[0] > revenue_pcts[1] + 5
+
+        # Margin expansion: gross margin higher in each of last 2 quarters
+        if len(gross_margins) >= 3:
+            margin_expansion = (
+                gross_margins[0] > gross_margins[1] + 0.5 and
+                gross_margins[1] > gross_margins[2] + 0.5
+            )
+
+    # FCF analysis
+    prev_fcf_values = []
+    if isinstance(cashflow_r, list) and cashflow_r:
+        for i, q in enumerate(cashflow_r[:6]):
+            fcf = q.get("freeCashFlow") or 0
+            if i == 0:
+                fcf_positive = fcf > 0
+            else:
+                prev_fcf_values.append(fcf)
+        # First time positive: current positive, all prior negative
+        if fcf_positive and prev_fcf_values:
+            fcf_first_positive = all(v <= 0 for v in prev_fcf_values[:3])
+
+    # Growth data from FMP financial-growth endpoint
+    growth_data = []
+    if isinstance(growth_r, list):
+        for g in growth_r[:4]:
+            growth_data.append({
+                "date":              str(g.get("date",""))[:10],
+                "revenue_growth":    round((g.get("revenueGrowth") or 0) * 100, 2),
+                "gross_profit_growth": round((g.get("grossProfitGrowth") or 0) * 100, 2),
+                "ebitda_growth":     round((g.get("ebitdaGrowth") or 0) * 100, 2),
+                "eps_growth":        round((g.get("epsgrowth") or 0) * 100, 2),
+            })
+
+    # Inflection score (0–5)
+    inflection_score = sum([
+        revenue_accel,
+        margin_expansion,
+        fcf_positive,
+        fcf_first_positive,
+        len(revenue_pcts) > 0 and revenue_pcts[0] >= 15  # ≥15% QoQ
+    ])
+
+    return no_cache({
+        "symbol":    sym,
+        "timestamp": datetime.utcnow().isoformat(),
+        "inflection_signals": {
+            "revenue_accelerating":  revenue_accel,
+            "margin_expanding_2q":   margin_expansion,
+            "fcf_positive":          fcf_positive,
+            "fcf_first_positive":    fcf_first_positive,
+            "revenue_qoq_ge15pct":   len(revenue_pcts) > 0 and revenue_pcts[0] >= 15,
+        },
+        "inflection_score": f"{inflection_score}/5",
+        "flag_tier2": inflection_score >= 3,
+        "raw": {
+            "revenue_qoq_pcts":  revenue_pcts,
+            "gross_margins_pct": gross_margins,
+            "growth_data":       growth_data,
+        }
+    })
+
+
+@app.get("/discovery/insider-cluster")
+async def discovery_insider_cluster(
+    symbol: str = Query(...),
+    days: int = Query(default=14),
+    min_total_usd: int = Query(default=50000),
+    _key=Depends(verify_key)
+):
+    """
+    Cluster Insider Buy Detector: Flags when 3+ distinct insiders buy within a
+    rolling window (default 14 days). Cluster buying is a high-conviction signal.
+    Old logic: single buyer, 48hr. New logic: 3+ distinct buyers, 14-day window.
+    """
+    sym = symbol.upper()
+    async with httpx.AsyncClient() as client:
+        r = await fmp(client, "insider-trading", {"symbol": sym, "limit": 50})
+
+    if not isinstance(r, list):
+        return no_cache({"symbol": sym, "error": "No insider data", "cluster_detected": False,
+                         "timestamp": datetime.utcnow().isoformat()})
+
+    from datetime import datetime as dt, timedelta
+    cutoff = dt.utcnow() - timedelta(days=days)
+
+    purchases = []
+    for trade in r:
+        ttype = (trade.get("transactionType") or "").upper()
+        # Only open-market purchases (P = purchase, not 10b5-1 plan)
+        if "PURCHASE" not in ttype and ttype != "P":
+            continue
+        trade_date_str = str(trade.get("transactionDate") or trade.get("filingDate") or "")[:10]
+        try:
+            trade_date = dt.strptime(trade_date_str, "%Y-%m-%d")
+        except Exception:
+            continue
+        if trade_date < cutoff:
+            continue
+        shares = trade.get("securitiesTransacted") or 0
+        price  = trade.get("price") or 0
+        value  = shares * price
+        if value < 1000:  # skip tiny/zero-value entries
+            continue
+        purchases.append({
+            "name":      trade.get("reportingName") or trade.get("reporterName") or "Unknown",
+            "title":     trade.get("typeOfOwner") or "",
+            "date":      trade_date_str,
+            "shares":    shares,
+            "price":     price,
+            "value_usd": round(value, 0),
+        })
+
+    distinct_buyers = list({p["name"] for p in purchases})
+    total_usd = sum(p["value_usd"] for p in purchases)
+    cluster_detected = len(distinct_buyers) >= 3 and total_usd >= min_total_usd
+
+    return no_cache({
+        "symbol":           sym,
+        "timestamp":        datetime.utcnow().isoformat(),
+        "window_days":      days,
+        "cluster_detected": cluster_detected,
+        "distinct_buyers":  len(distinct_buyers),
+        "buyer_names":      distinct_buyers,
+        "total_value_usd":  total_usd,
+        "min_threshold_usd": min_total_usd,
+        "purchases":        sorted(purchases, key=lambda x: x["date"], reverse=True),
+        "signal": "🔴 CLUSTER BUY — HIGH CONVICTION" if cluster_detected else
+                  "🟡 SINGLE/DUAL BUYER" if len(distinct_buyers) in [1,2] and total_usd >= min_total_usd else
+                  "⬜ NO SIGNIFICANT INSIDER BUYING"
+    })
+
+
+@app.get("/discovery/institutional")
+async def discovery_institutional(symbol: str = Query(...), _key=Depends(verify_key)):
+    """
+    Institutional Footprint: Detects smart money accumulation in micro/small caps.
+    Flags when institutional ownership increased 10%+ in most recent filing cycle.
+    """
+    sym = symbol.upper()
+    async with httpx.AsyncClient() as client:
+        r = await fmp(client, "institutional-ownership/institutional-holders", {"symbol": sym})
+
+    if not isinstance(r, list) or len(r) < 2:
+        return no_cache({
+            "symbol": sym, "timestamp": datetime.utcnow().isoformat(),
+            "institutional_acceleration": False,
+            "note": "Insufficient filing data (need 2+ periods)"
+        })
+
+    # Most recent vs prior period
+    recent = r[0]
+    prior  = r[1]
+
+    recent_pct = recent.get("ownershipPercent") or recent.get("institutionalOwnershipPercentage") or 0
+    prior_pct  = prior.get("ownershipPercent")  or prior.get("institutionalOwnershipPercentage")  or 0
+    change_pct = round(recent_pct - prior_pct, 2)
+
+    recent_holders = recent.get("numberOfInstitutionalHolders") or recent.get("investorsHolding") or 0
+    prior_holders  = prior.get("numberOfInstitutionalHolders")  or prior.get("investorsHolding")  or 0
+    holder_change  = recent_holders - prior_holders
+
+    acceleration = change_pct >= 5.0  # 5%+ ownership increase = whale footprint
+
+    return no_cache({
+        "symbol":    sym,
+        "timestamp": datetime.utcnow().isoformat(),
+        "institutional_acceleration": acceleration,
+        "ownership_pct_recent": recent_pct,
+        "ownership_pct_prior":  prior_pct,
+        "ownership_change_pct": change_pct,
+        "holders_recent":       recent_holders,
+        "holders_prior":        prior_holders,
+        "holder_change":        holder_change,
+        "filing_period_recent": str(recent.get("date",""))[:10],
+        "filing_period_prior":  str(prior.get("date",""))[:10],
+        "signal": "🐋 WHALE FOOTPRINT — institutional accumulation detected" if acceleration else
+                  "📊 STABLE" if change_pct >= 0 else "📉 INSTITUTIONAL DISTRIBUTION"
+    })
+
+
+@app.get("/discovery/coiled-spring")
+async def discovery_coiled_spring(symbol: str = Query(...), _key=Depends(verify_key)):
+    """
+    Coiled Spring Technical Check: Uses FMP price-change data to approximate
+    consolidation tightness and momentum posture for Tier 1 Roth candidates.
+    Complements Twelve Data time_series calls on survivors.
+    Note: For precise BB width and ADX, supplement with Twelve Data /time_series.
+    """
+    sym = symbol.upper()
+    async with httpx.AsyncClient() as client:
+        quote_r, change_r = await asyncio.gather(
+            fmp(client, "quote", {"symbol": sym}),
+            fmp(client, "stock-price-change", {"symbol": sym}),
+            return_exceptions=True
+        )
+
+    q = first(quote_r)
+    c = first(change_r) if not isinstance(change_r, Exception) else {}
+
+    price     = q.get("price") or 0
+    year_low  = q.get("yearLow")  or 0
+    year_high = q.get("yearHigh") or 1
+    day_low   = q.get("dayLow")   or price
+    day_high  = q.get("dayHigh")  or price
+    avg_vol   = q.get("avgVolume") or 1
+    vol       = q.get("volume")    or 0
+
+    # Proxy for consolidation: distance from 52wk high
+    pct_from_high = round(((year_high - price) / year_high) * 100, 1) if year_high else None
+
+    # Momentum check — coiled spring has flat/low recent momentum but not falling
+    m1  = c.get("1M")  or 0
+    m3  = c.get("3M")  or 0
+    m5d = c.get("5D")  or 0
+
+    # RSI proxy
+    rsi_proxy, rsi_dir, rsi_sig = momentum_to_rsi_proxy(c)
+
+    # Spring criteria
+    flat_recent     = abs(m1) < 8           # <8% move in 1M = consolidating
+    rsi_zone        = 45 <= (rsi_proxy or 0) <= 65  # not overbought, not dead
+    near_high       = pct_from_high is not None and pct_from_high < 15  # within 15% of 52wk high
+    vol_compression = vol < avg_vol * 0.85   # volume drying up = accumulation
+    positive_base   = m3 > 0                 # still positive over 3M = base building
+
+    spring_score = sum([flat_recent, rsi_zone, near_high, vol_compression, positive_base])
+
+    return no_cache({
+        "symbol":    sym,
+        "timestamp": datetime.utcnow().isoformat(),
+        "price":     price,
+        "spring_signals": {
+            "flat_recent_1M":       flat_recent,
+            "rsi_in_zone_45_65":    rsi_zone,
+            "near_52wk_high":       near_high,
+            "volume_compressing":   vol_compression,
+            "positive_3M_base":     positive_base,
+        },
+        "spring_score": f"{spring_score}/5",
+        "flag_tier1":   spring_score >= 3,
+        "raw": {
+            "pct_from_52wk_high": pct_from_high,
+            "momentum_5D":  m5d,
+            "momentum_1M":  m1,
+            "momentum_3M":  m3,
+            "rsi_proxy":    rsi_proxy,
+            "rsi_signal":   rsi_sig,
+            "volume_ratio": round(vol / avg_vol, 2) if avg_vol else None,
+        },
+        "twelve_data_next": f"https://api.twelvedata.com/time_series?symbol={sym}&interval=1day&outputsize=20&apikey=7873bf2e1b58407fbf87e642db913484"
+    })
+
+
+
 @app.get("/watchlist")
 async def watchlist(_key=Depends(verify_key)):
     wl = await fetch_watchlist_data()
