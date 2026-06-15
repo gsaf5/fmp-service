@@ -921,6 +921,167 @@ async def discovery_coiled_spring(symbol: str = Query(...), _key=Depends(verify_
 
 
 
+
+@app.get("/discovery/debug-universe")
+async def discovery_debug_universe(
+    marketCapMin: int = Query(default=50000000),
+    marketCapMax: int = Query(default=2000000000),
+    maxMomentum3M: float = Query(default=40.0),
+    minIpoMonths: int = Query(default=12),
+    _key=Depends(verify_key)
+):
+    """
+    Debug endpoint: shows exactly what survives each wall layer and
+    the cap distribution at each stage. Diagnoses sampling bias.
+    """
+    async with httpx.AsyncClient(timeout=30) as client:
+        screener_params = {
+            "marketCapMoreThan": marketCapMin,
+            "marketCapLowerThan": marketCapMax,
+            "isEtf": "false",
+            "isActivelyTrading": "true",
+            "country": "US",
+            "netIncomeMoreThan": 0,
+            "limit": 1000,
+        }
+        universe_raw = await fmp(client, "company-screener", screener_params)
+
+    if not isinstance(universe_raw, list):
+        return no_cache({"error": "Screener failed", "timestamp": datetime.utcnow().isoformat()})
+
+    def cap_band(s):
+        mc = (s.get("marketCap") or 0) / 1e6
+        if mc < 100:   return "A_under100M"
+        if mc < 300:   return "B_100-300M"
+        if mc < 500:   return "C_300-500M"
+        if mc < 750:   return "D_500-750M"
+        if mc < 1000:  return "E_750M-1B"
+        if mc < 1500:  return "F_1B-1.5B"
+        return             "G_1.5B-2B"
+
+    def dist(lst):
+        from collections import Counter
+        c = Counter(cap_band(s) for s in lst)
+        return dict(sorted(c.items()))
+
+    # Stage 0: raw screener
+    raw_dist = dist(universe_raw)
+
+    # Stage 1: CEF/BDC kill
+    EXCLUDE_INDUSTRIES = {
+        "closed-end fund", "asset management", "exchange traded fund",
+        "diversified financials", "mortgage real estate investment trust",
+        "real estate investment trust", "business development company",
+        "investment trusts/mutual funds", "credit services", "capital markets",
+    }
+    wall1 = []
+    for s in universe_raw:
+        industry = (s.get("industry") or "").lower()
+        name     = (s.get("companyName") or s.get("name") or "").lower()
+        if any(excl in industry for excl in EXCLUDE_INDUSTRIES):
+            continue
+        if any(kw in name for kw in ["closed-end", "closed end", "interval fund",
+                                      "nuveen", "calamos", "pimco dynamic",
+                                      "blackrock tcp", "ares capital"]):
+            continue
+        wall1.append(s)
+    wall1_dist = dist(wall1)
+
+    # Stage 2: IPO age kill
+    wall2 = []
+    for s in wall1:
+        ipo_date = s.get("ipoDate") or ""
+        if ipo_date:
+            try:
+                from datetime import datetime as dt2
+                ipo_dt = dt2.strptime(ipo_date[:10], "%Y-%m-%d")
+                months_public = (datetime.utcnow() - ipo_dt).days / 30
+                if months_public < minIpoMonths:
+                    continue
+            except Exception:
+                pass
+        wall2.append(s)
+    wall2_dist = dist(wall2)
+
+    # Stage 3: Momentum + proximity kill
+    # Check how many have null momentum fields (the core diagnostic)
+    null_m3  = sum(1 for s in wall2 if not s.get("threeMonthReturn") and not s.get("priceChange3Month"))
+    null_m1  = sum(1 for s in wall2 if not s.get("oneMonthReturn") and not s.get("priceChange1Month"))
+    null_yh  = sum(1 for s in wall2 if not s.get("yearHigh") and not s.get("highestPrice"))
+
+    wall3_ran = wall3_spike = wall3_pass = 0
+    wall3 = []
+    for s in wall2:
+        m3 = s.get("threeMonthReturn") or s.get("priceChange3Month") or None
+        m1 = s.get("oneMonthReturn")   or s.get("priceChange1Month") or None
+        price = s.get("price") or 0
+        yh    = s.get("yearHigh") or s.get("highestPrice") or 0
+
+        if m3 is not None and m3 > maxMomentum3M:
+            wall3_ran += 1
+            continue
+        if price > 0 and yh > 0:
+            proximity = price / yh
+            if proximity >= 0.90 and m1 is not None and m1 >= 15:
+                wall3_spike += 1
+                continue
+        wall3_pass += 1
+        wall3.append(s)
+    wall3_dist = dist(wall3)
+
+    # Quartile sampling simulation
+    wall3_sorted = sorted(wall3, key=lambda x: x.get("marketCap") or 0)
+    total = len(wall3_sorted)
+    maxNames = 200
+    if total <= maxNames:
+        sampled = wall3_sorted
+    else:
+        q = total // 4
+        q1 = wall3_sorted[:q]
+        q2 = wall3_sorted[q:q*2]
+        q3 = wall3_sorted[q*2:q*3]
+        q4 = wall3_sorted[q*3:]
+        per_q = maxNames // 4
+        import random
+        random.seed(42)
+        sampled = (
+            q1[:per_q] +
+            random.sample(q2, min(per_q, len(q2))) +
+            random.sample(q3, min(per_q, len(q3))) +
+            random.sample(q4, min(per_q, len(q4)))
+        )
+    sampled_dist = dist(sampled)
+
+    return no_cache({
+        "timestamp": datetime.utcnow().isoformat(),
+        "diagnosis": {
+            "momentum_fields_null": {
+                "3M_null": null_m3,
+                "1M_null": null_m1,
+                "yearHigh_null": null_yh,
+                "total_post_wall2": len(wall2),
+                "pct_with_no_3M_data": f"{null_m3/len(wall2)*100:.1f}%" if wall2 else "n/a",
+                "conclusion": "If 3M_null is high, Wall3A is NOT firing — momentum kill is blind" if null_m3 > len(wall2)*0.5 else "Momentum data present — Wall3A is active"
+            },
+            "wall3_kills": {
+                "already_ran_3M": wall3_ran,
+                "vertical_spike": wall3_spike,
+                "passed": wall3_pass,
+            }
+        },
+        "cap_distribution_by_stage": {
+            "0_raw_screener":    {"count": len(universe_raw), "bands": raw_dist},
+            "1_after_cef_kill":  {"count": len(wall1),        "bands": wall1_dist},
+            "2_after_ipo_kill":  {"count": len(wall2),        "bands": wall2_dist},
+            "3_after_momentum":  {"count": len(wall3),        "bands": wall3_dist},
+            "4_sampled_200":     {"count": len(sampled),      "bands": sampled_dist},
+        },
+        "sample_fields_present": {
+            "fields_in_first_record": list((universe_raw[0] if universe_raw else {}).keys()),
+        }
+    })
+
+
 @app.get("/watchlist")
 async def watchlist(_key=Depends(verify_key)):
     wl = await fetch_watchlist_data()
