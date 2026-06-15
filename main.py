@@ -517,6 +517,42 @@ async def financials(symbol: str = Query(...), period: str = Query(default="annu
 
 # ── NEW DISCOVERY ROUTES ──────────────────────────────────────────────────────
 
+@app.get("/discovery/screener-test")
+async def discovery_screener_test(_key=Depends(verify_key)):
+    """
+    Diagnostic: Tests which FMP stable screener endpoint path is active.
+    Returns first working path and a 3-name sample. Run this if /discovery/universe returns 404.
+    """
+    test_params = {
+        "marketCapMoreThan": 500000000,
+        "marketCapLowerThan": 1000000000,
+        "isEtf": "false",
+        "isActivelyTrading": "true",
+        "country": "US",
+    }
+    results = {}
+    async with httpx.AsyncClient() as client:
+        for path in ["stock-screener", "screener", "company-screener"]:
+            r = await fmp(client, path, test_params)
+            if isinstance(r, list) and len(r) > 0:
+                results[path] = {"status": "WORKING", "sample_count": len(r),
+                                 "sample": [{k: v for k, v in s.items()
+                                             if k in ["symbol","companyName","marketCap","price"]}
+                                            for s in r[:3]]}
+            elif isinstance(r, dict) and "error" not in r:
+                results[path] = {"status": "WORKING_DICT", "keys": list(r.keys())[:5]}
+            else:
+                err = r.get("error", "empty") if isinstance(r, dict) else str(r)[:80]
+                results[path] = {"status": f"FAILED: {err}"}
+    working = [p for p, v in results.items() if "WORKING" in v.get("status","")]
+    return no_cache({
+        "timestamp": datetime.utcnow().isoformat(),
+        "working_path": working[0] if working else None,
+        "recommendation": f"Use: {working[0]}" if working else "No screener path working",
+        "all_paths": results
+    })
+
+
 @app.get("/discovery/universe")
 async def discovery_universe(
     marketCapMin: int = Query(default=50000000),
@@ -538,7 +574,25 @@ async def discovery_universe(
         }
         if profitableOnly:
             params["netIncomeMoreThan"] = 0
-        r = await fmp(client, "screener", params)
+        # Try known FMP stable screener paths in order
+        r = None
+        last_error = None
+        for path in ["stock-screener", "screener", "company-screener"]:
+            candidate = await fmp(client, path, params)
+            if isinstance(candidate, list):
+                r = candidate
+                break
+            elif isinstance(candidate, dict) and "error" not in candidate:
+                r = candidate
+                break
+            else:
+                last_error = candidate.get("error", str(candidate)) if isinstance(candidate, dict) else str(candidate)
+        if r is None:
+            return no_cache({
+                "error": f"All screener paths failed. Last error: {last_error}",
+                "paths_tried": ["stock-screener", "screener", "company-screener"],
+                "timestamp": datetime.utcnow().isoformat()
+            })
 
     if isinstance(r, dict) and "error" in r:
         return no_cache({"error": r["error"], "timestamp": datetime.utcnow().isoformat()})
