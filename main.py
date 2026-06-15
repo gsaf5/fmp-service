@@ -1025,8 +1025,17 @@ async def discovery_scan(
                 prev = quarters[i+1].get("revenue") or 1
                 if prev != 0:
                     revenue_pcts.append(round(((curr - prev) / abs(prev)) * 100, 1))
-                gm = quarters[i].get("grossProfitRatio") or 0
-                gross_margins.append(round(gm * 100, 2))
+                # Try ratio first, fall back to computing from raw numbers
+            gm_ratio = quarters[i].get("grossProfitRatio")
+            if gm_ratio is not None:
+                gross_margins.append(round(gm_ratio * 100, 2))
+            else:
+                rev_q = quarters[i].get("revenue") or 0
+                gp_q  = quarters[i].get("grossProfit") or 0
+                if rev_q > 0:
+                    gross_margins.append(round((gp_q / rev_q) * 100, 2))
+                else:
+                    gross_margins.append(0.0)
             if len(revenue_pcts) >= 2:
                 revenue_accel = revenue_pcts[0] > revenue_pcts[1] + 5
             if len(gross_margins) >= 3:
@@ -1098,11 +1107,13 @@ async def discovery_scan(
 
     # ── STAGE 3: COILED SPRING ───────────────────────────────────────────────
     async def get_spring(sym, client):
-        quote_r, change_r = await asyncio.gather(
-            fmp(client, "quote", {"symbol": sym}),
+        quote_r, change_r, metrics_r = await asyncio.gather(
+            fmp(client, "quote",              {"symbol": sym}),
             fmp(client, "stock-price-change", {"symbol": sym}),
+            fmp(client, "key-metrics",        {"symbol": sym, "period": "annual", "limit": 1}),
             return_exceptions=True
         )
+        km = first(metrics_r) if not isinstance(metrics_r, Exception) else {}
         q = first(quote_r) if not isinstance(quote_r, Exception) else {}
         c = first(change_r) if not isinstance(change_r, Exception) else {}
         price   = q.get("price") or 0
@@ -1132,12 +1143,18 @@ async def discovery_scan(
                 "positive_3M":   positive_base,
             },
             "price":          price,
+            "year_high":      yh,
+            "year_low":       q.get("yearLow"),
             "pct_from_high":  pct_from_high,
             "rsi_proxy":      rsi_proxy,
             "rsi_signal":     rsi_sig,
             "momentum_1M":    m1,
             "momentum_3M":    m3,
             "vol_ratio":      round(vol / avg_vol, 2) if avg_vol else None,
+            "avg_volume":     avg_vol,
+            "pe":             km.get("peRatio") if km else None,
+            "pb":             km.get("pbRatio") if km else None,
+            "ev_ebitda":      km.get("evToEbitda") if km else None,
         }
 
     # ── RUN STAGES 2A + 2B IN PARALLEL BATCHES OF 20 ────────────────────────
@@ -1220,29 +1237,50 @@ async def discovery_scan(
         if sscore < minSpring and not cluster and iscore < 3:
             continue
 
+        price_val = sp.get("price") or uni.get("price") or 0
+        beta_val  = uni.get("beta") or 0
+        rev_pcts  = f.get("revenue_pcts", [])
+
+        # ── HARD KILLS ──────────────────────────────────────────────────────
+        # 1. Penny stock: price < $1.00
+        if price_val > 0 and price_val < 1.00:
+            continue
+        # 2. Absurd beta: |beta| > 10 (data artifact)
+        if abs(beta_val) > 10:
+            continue
+        # 3. Revenue QoQ data artifact: any single quarter > 10,000% (base effect distortion)
+        if rev_pcts and any(abs(r) > 10000 for r in rev_pcts):
+            continue
+        # 4. Market cap too thin: under $50M (screener sometimes returns stale data)
+        mktcap_val = uni.get("marketCap") or 0
+        if mktcap_val < 50_000_000:
+            continue
+
         flagged.append({
-            "symbol":          sym,
-            "name":            uni.get("name") or uni.get("companyName", ""),
-            "sector":          uni.get("sector", ""),
-            "marketCap_M":     round((uni.get("marketCap") or 0) / 1e6, 1),
-            "beta":            uni.get("beta"),
-            "price":           sp.get("price") or uni.get("price"),
-            "composite_score": composite,
+            "symbol":           sym,
+            "name":             uni.get("name") or uni.get("companyName", ""),
+            "sector":           uni.get("sector", ""),
+            "industry":         uni.get("industry", ""),
+            "marketCap_M":      round(mktcap_val / 1e6, 1),
+            "beta":             beta_val,
+            "price":            price_val,
+            "composite_score":  composite,
             "inflection_score": iscore,
-            "spring_score":    sscore,
-            "cluster_buy":     cluster,
-            "tier":            tier,
-            "fund_signals":    f.get("signals", {}),
-            "spring_signals":  sp.get("signals", {}),
-            "revenue_qoq":     f.get("revenue_pcts", []),
-            "gross_margins":   f.get("gross_margins", []),
-            "insider_buyers":  ins.get("distinct_buyers", 0),
-            "insider_usd":     ins.get("total_usd", 0),
-            "pct_from_52hi":   sp.get("pct_from_high"),
-            "rsi_proxy":       sp.get("rsi_proxy"),
-            "momentum_1M":     sp.get("momentum_1M"),
-            "momentum_3M":     sp.get("momentum_3M"),
-            "vol_ratio":       sp.get("vol_ratio"),
+            "spring_score":     sscore,
+            "cluster_buy":      cluster,
+            "tier":             tier,
+            "fund_signals":     f.get("signals", {}),
+            "spring_signals":   sp.get("signals", {}),
+            "revenue_qoq":      rev_pcts,
+            "gross_margins":    f.get("gross_margins", []),
+            "insider_buyers":   ins.get("distinct_buyers", 0),
+            "insider_usd":      ins.get("total_usd", 0),
+            "pct_from_52hi":    sp.get("pct_from_high"),
+            "rsi_proxy":        sp.get("rsi_proxy"),
+            "rsi_signal":       sp.get("rsi_signal"),
+            "momentum_1M":      sp.get("momentum_1M"),
+            "momentum_3M":      sp.get("momentum_3M"),
+            "vol_ratio":        sp.get("vol_ratio"),
         })
 
     # Sort by composite score descending
