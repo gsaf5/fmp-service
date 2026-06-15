@@ -999,57 +999,109 @@ async def discovery_scan(
     if not isinstance(universe_raw, list) or len(universe_raw) == 0:
         return no_cache({"error": "Universe pull failed or empty", "timestamp": start_ts.isoformat()})
 
-    # ── CEF / BDC / REIT / ETF hard-kill by industry keywords ─────────────
+    # ══════════════════════════════════════════════════════════════════════
+    # STRUCTURAL WALL — applied to screener data in memory, zero extra calls
+    # ══════════════════════════════════════════════════════════════════════
+
+    # ── WALL 1: CEF / BDC / REIT / ETF industry kill ─────────────────────
     EXCLUDE_INDUSTRIES = {
         "closed-end fund", "asset management", "exchange traded fund",
         "diversified financials", "mortgage real estate investment trust",
         "real estate investment trust", "business development company",
-        "investment trusts/mutual funds", "credit services",
-        "capital markets",  # catches many CEFs/BDCs
+        "investment trusts/mutual funds", "credit services", "capital markets",
     }
-    EXCLUDE_SECTORS = {
-        # Only exclude if ALSO in a CEF-like industry — don't nuke all financials
-    }
-    # Also exclude by ticker patterns common to CEFs (single letter + number combos handled by industry check)
-    filtered_raw = []
+    wall1_passed = []
     for s in universe_raw:
         industry = (s.get("industry") or "").lower()
-        sector   = (s.get("sector")   or "").lower()
         name     = (s.get("companyName") or s.get("name") or "").lower()
-        # Industry-level kill
         if any(excl in industry for excl in EXCLUDE_INDUSTRIES):
             continue
-        # Name-pattern kills for known CEF structures
         if any(kw in name for kw in ["closed-end", "closed end", "interval fund",
                                       "nuveen", "calamos", "pimco dynamic",
                                       "blackrock tcp", "ares capital"]):
             continue
-        filtered_raw.append(s)
+        wall1_passed.append(s)
 
-    # Sort by market cap ascending (smallest = most undiscovered)
+    # ── WALL 2: IPO age kill — < 12 months public ────────────────────────
+    wall2_passed = []
+    for s in wall1_passed:
+        ipo_date = s.get("ipoDate") or ""
+        if ipo_date:
+            try:
+                from datetime import datetime as dt2
+                ipo_dt = dt2.strptime(ipo_date[:10], "%Y-%m-%d")
+                months_public = (datetime.utcnow() - ipo_dt).days / 30
+                if months_public < minIpoMonths:
+                    continue
+            except Exception:
+                pass
+        wall2_passed.append(s)
+
+    # ── WALL 3: PROXIMITY + MOMENTUM PRE-FILTER (zero extra API calls) ───
+    # Uses price + yearHigh already in screener payload
+    # Proximity ratio = price / 52wk_high
+    # Rule A: proximity < 0.90 (more than 10% below high) → PASS directly
+    # Rule B: proximity >= 0.90 (within 10% of high) → conditional fork:
+    #   - 1M momentum < 5%  → PASS (flat consolidation at high = coiled spring)
+    #   - 1M momentum >= 15% → KILL (vertical spike to high = chasing)
+    #   - 5% <= 1M < 15%    → PASS (borderline — let fundamentals decide)
+    # Rule C: 3M momentum > maxMomentum3M → KILL (already ran regardless of proximity)
+    wall3_passed = []
+    wall_kills   = {"cef_bdc": len(universe_raw) - len(wall1_passed),
+                    "ipo_age": len(wall1_passed) - len(wall2_passed),
+                    "already_ran_3M": 0,
+                    "vertical_spike_to_high": 0,
+                    "passed": 0}
+
+    for s in wall2_passed:
+        price    = s.get("price") or 0
+        yh       = s.get("yearHigh") or s.get("highestPrice") or 0
+        # 3M momentum from screener (field varies by FMP version)
+        m3       = s.get("threeMonthReturn") or s.get("priceChange3Month") or 0
+        m1       = s.get("oneMonthReturn")   or s.get("priceChange1Month") or 0
+
+        # Rule C: 3M already ran
+        if m3 and m3 > maxMomentum3M:
+            wall_kills["already_ran_3M"] += 1
+            continue
+
+        # Rule A/B: Proximity to 52wk high
+        if price > 0 and yh > 0:
+            proximity = price / yh
+            if proximity >= 0.90:
+                # Within 10% of high — apply consolidation exception
+                if m1 and m1 >= 15:
+                    # Vertical spike to high — kill
+                    wall_kills["vertical_spike_to_high"] += 1
+                    continue
+                # else: flat base at high or no 1M data — pass (spring candidate)
+
+        wall_kills["passed"] += 1
+        wall3_passed.append(s)
+
+    filtered_raw = wall3_passed  # filtered_raw used in pipeline_summary
+
+    # ── QUARTILE-BALANCED SAMPLING across full cap range ──────────────────
     filtered_raw.sort(key=lambda x: x.get("marketCap") or 0)
-
-    # Sample across the FULL range, not just top-N
-    # Divide into 4 quartiles and take maxNames/4 from each — ensures coverage
     total = len(filtered_raw)
     if total <= maxNames:
         universe = filtered_raw
     else:
         q = total // 4
-        q1 = filtered_raw[:q]                        # smallest caps
+        q1 = filtered_raw[:q]
         q2 = filtered_raw[q:q*2]
         q3 = filtered_raw[q*2:q*3]
-        q4 = filtered_raw[q*3:]                      # largest caps (still <$2B)
+        q4 = filtered_raw[q*3:]
         per_q = maxNames // 4
         import random
-        random.seed(42)  # reproducible within same day
+        random.seed(42)
         universe = (
-            q1[:per_q] +                             # always take smallest caps in full
+            q1[:per_q] +
             random.sample(q2, min(per_q, len(q2))) +
             random.sample(q3, min(per_q, len(q3))) +
             random.sample(q4, min(per_q, len(q4)))
         )
-        universe.sort(key=lambda x: x.get("marketCap") or 0)  # re-sort after sampling
+        universe.sort(key=lambda x: x.get("marketCap") or 0)
 
     symbols = [s["symbol"] for s in universe if s.get("symbol")]
 
@@ -1371,21 +1423,28 @@ async def discovery_scan(
         "timestamp":       start_ts.isoformat(),
         "elapsed_seconds": elapsed,
         "pipeline_summary": {
-            "universe_total":          len(universe_raw),
-            "universe_after_cef_kill": len(filtered_raw),
-            "universe_scanned":        len(symbols),
-            "survivors_stage2":        len(survivors),
-            "flagged_output":          len(flagged),
-            "cap_range_scanned":       f"${(universe[0].get('marketCap') or 0)/1e6:.0f}M – ${(universe[-1].get('marketCap') or 0)/1e6:.0f}M" if universe else "n/a",
+            "universe_total":              len(universe_raw),
+            "structural_wall_kills": {
+                "cef_bdc_reit":            wall_kills["cef_bdc"],
+                "ipo_too_recent":          wall_kills["ipo_age"],
+                "already_ran_3M":          wall_kills["already_ran_3M"],
+                "vertical_spike_to_high":  wall_kills["vertical_spike_to_high"],
+                "passed_all_walls":        wall_kills["passed"],
+            },
+            "universe_scanned":            len(symbols),
+            "survivors_stage2":            len(survivors),
+            "flagged_output":              len(flagged),
+            "cap_range_scanned":           f"${(universe[0].get('marketCap') or 0)/1e6:.0f}M – ${(universe[-1].get('marketCap') or 0)/1e6:.0f}M" if universe else "n/a",
         },
         "hard_kill_rules": {
-            "penny_stock":      "price < $1.00",
-            "absurd_beta":      "|beta| > 10",
-            "rev_artifact":     "any QoQ > 10,000%",
-            "mktcap_floor":     "mktcap < $50M",
-            "already_ran":      "3M momentum > 40%",
-            "overbought":       "RSI proxy > 65",
-            "ipo_too_recent":   "IPO < 12 months ago",
+            "WALL1_cef_bdc_reit":    "industry/name pattern kill — no API cost",
+            "WALL2_ipo_age":         f"IPO < {minIpoMonths} months ago — no API cost",
+            "WALL3A_already_ran":    f"3M momentum > {maxMomentum3M}% — no API cost",
+            "WALL3B_spike_to_high":  "within 10% of 52wk high AND 1M > 15% — no API cost",
+            "OUTPUT_penny":          "price < $1.00",
+            "OUTPUT_beta":           "|beta| > 10",
+            "OUTPUT_rev_artifact":   "any QoQ > 10,000%",
+            "OUTPUT_overbought":     f"RSI proxy > {maxRsi}",
         },
         "filters": {
             "marketCap":       f"${marketCapMin/1e6:.0f}M–${marketCapMax/1e6:.0f}M",
