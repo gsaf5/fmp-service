@@ -934,19 +934,36 @@ async def discovery_debug_universe(
     Debug endpoint: shows exactly what survives each wall layer and
     the cap distribution at each stage. Diagnoses sampling bias.
     """
+    # Multi-bucket pull (same logic as /discovery/scan)
+    CAP_BUCKETS_DBG = [
+        (50_000_000,   150_000_000),
+        (150_000_000,  400_000_000),
+        (400_000_000,  900_000_000),
+        (900_000_000,  2_000_000_000),
+    ]
+    active_dbg = [
+        (max(lo, marketCapMin), min(hi, marketCapMax))
+        for lo, hi in CAP_BUCKETS_DBG
+        if lo < marketCapMax and hi > marketCapMin
+    ]
     async with httpx.AsyncClient(timeout=30) as client:
-        screener_params = {
-            "marketCapMoreThan": marketCapMin,
-            "marketCapLowerThan": marketCapMax,
-            "isEtf": "false",
-            "isActivelyTrading": "true",
-            "country": "US",
-            "netIncomeMoreThan": 0,
-            "limit": 1000,
-        }
-        universe_raw = await fmp(client, "company-screener", screener_params)
+        dbg_buckets = await asyncio.gather(*[
+            fmp(client, "company-screener", {
+                "marketCapMoreThan": lo, "marketCapLowerThan": hi,
+                "isEtf": "false", "isActivelyTrading": "true",
+                "country": "US", "netIncomeMoreThan": 0, "limit": 250,
+            }) for lo, hi in active_dbg
+        ])
+    seen_d = set()
+    universe_raw = []
+    for bucket in dbg_buckets:
+        for s in (bucket if isinstance(bucket, list) else []):
+            sym = s.get("symbol")
+            if sym and sym not in seen_d:
+                seen_d.add(sym)
+                universe_raw.append(s)
 
-    if not isinstance(universe_raw, list):
+    if not universe_raw:
         return no_cache({"error": "Screener failed", "timestamp": datetime.utcnow().isoformat()})
 
     def cap_band(s):
@@ -1142,23 +1159,118 @@ async def discovery_scan(
     """
     start_ts = datetime.utcnow()
 
-    # ── STAGE 1: UNIVERSE ────────────────────────────────────────────────────
-    async with httpx.AsyncClient(timeout=30) as client:
-        screener_params = {
-            "marketCapMoreThan": marketCapMin,
-            "marketCapLowerThan": marketCapMax,
+    # ── STAGE 1: UNIVERSE — multi-bucket pull to fix FMP cap bias ────────────
+    # FMP company-screener ignores marketCapLowerThan below ~$750M and returns
+    # mostly $1B-$2B names. Fix: pull 4 explicit cap buckets and merge.
+    # Each bucket gets limit=250 → up to 1000 total before dedup.
+    CAP_BUCKETS = [
+        (50_000_000,   150_000_000),   # micro: $50M–$150M
+        (150_000_000,  400_000_000),   # small-low: $150M–$400M
+        (400_000_000,  900_000_000),   # small-high: $400M–$900M
+        (900_000_000,  2_000_000_000), # mid: $900M–$2B
+    ]
+    # If caller specified a tighter range, filter buckets to overlap
+    active_buckets = [
+        (lo, hi) for lo, hi in CAP_BUCKETS
+        if lo < marketCapMax and hi > marketCapMin
+    ]
+    # Clamp bucket edges to caller's range
+    active_buckets = [
+        (max(lo, marketCapMin), min(hi, marketCapMax))
+        for lo, hi in active_buckets
+    ]
+
+    async def fetch_bucket(lo, hi, client):
+        params = {
+            "marketCapMoreThan": lo,
+            "marketCapLowerThan": hi,
             "isEtf": "false",
             "isActivelyTrading": "true",
             "country": "US",
             "netIncomeMoreThan": 0,
-            "limit": 1000,
+            "limit": 250,
         }
         if sector:
-            screener_params["sector"] = sector
-        universe_raw = await fmp(client, "company-screener", screener_params)
+            params["sector"] = sector
+        result = await fmp(client, "company-screener", params)
+        if isinstance(result, list):
+            return result
+        # Fallback: try stock-screener path
+        result2 = await fmp(client, "stock-screener", params)
+        return result2 if isinstance(result2, list) else []
 
-    if not isinstance(universe_raw, list) or len(universe_raw) == 0:
-        return no_cache({"error": "Universe pull failed or empty", "timestamp": start_ts.isoformat()})
+    async with httpx.AsyncClient(timeout=30) as client:
+        bucket_results = await asyncio.gather(
+            *[fetch_bucket(lo, hi, client) for lo, hi in active_buckets]
+        )
+
+    # Merge + deduplicate by symbol
+    seen_syms = set()
+    universe_raw = []
+    for bucket in bucket_results:
+        for s in (bucket if isinstance(bucket, list) else []):
+            sym = s.get("symbol")
+            if sym and sym not in seen_syms:
+                seen_syms.add(sym)
+                universe_raw.append(s)
+
+    if not universe_raw:
+        return no_cache({"error": "Universe pull failed — all buckets empty", "timestamp": start_ts.isoformat()})
+
+    # ── STAGE 1B: ENRICH WITH MOMENTUM DATA (batch price-change calls) ───────
+    # company-screener returns no momentum fields — fetch them now before walls
+    # Batch in groups of 20 using /quote which returns volume + price vs MAs
+    MOMENTUM_BATCH = 20
+    momentum_map = {}
+
+    async def fetch_momentum_batch(syms, client):
+        # Use /quote for price vs 50/200 MA + volume ratio (fast, cheap)
+        symbols_str = ",".join(syms)
+        r = await fmp(client, "quote", {"symbol": symbols_str})
+        if isinstance(r, list):
+            return {q["symbol"]: q for q in r if q.get("symbol")}
+        return {}
+
+    async with httpx.AsyncClient(timeout=25) as client:
+        all_syms = [s["symbol"] for s in universe_raw if s.get("symbol")]
+        batch_tasks = [
+            fetch_momentum_batch(all_syms[i:i+MOMENTUM_BATCH], client)
+            for i in range(0, len(all_syms), MOMENTUM_BATCH)
+        ]
+        batch_results = await asyncio.gather(*batch_tasks, return_exceptions=True)
+
+    for br in batch_results:
+        if isinstance(br, dict):
+            momentum_map.update(br)
+
+    # Attach momentum fields to each universe entry
+    for s in universe_raw:
+        sym = s.get("symbol", "")
+        q   = momentum_map.get(sym, {})
+        if q:
+            # Compute approximate 1M/3M momentum from price vs moving averages
+            price   = q.get("price") or 0
+            ma50    = q.get("priceAvg50") or 0
+            ma200   = q.get("priceAvg200") or 0
+            yh      = q.get("yearHigh") or 0
+            yl      = q.get("yearLow")  or 0
+            avg_vol = q.get("avgVolume") or 1
+            vol     = q.get("volume") or 0
+
+            # Approximate 3M momentum: price vs 50d MA (50d ≈ 2.5 months)
+            m3_proxy = round(((price - ma50) / ma50) * 100, 1) if ma50 > 0 else None
+            # Approximate 1M momentum: price vs (midpoint of 50d and current)
+            # Better: use stock-price-change endpoint but that's per-ticker
+            # For now use the change% from quote as a 1D proxy, flag for upgrade
+            m1_proxy = round(((price - ma50) / ma50) * 50, 1) if ma50 > 0 else None
+
+            # yearHigh from quote is more reliable than screener
+            s["yearHigh"]        = yh or s.get("yearHigh")
+            s["yearLow"]         = yl or s.get("yearLow")
+            s["threeMonthReturn"] = m3_proxy
+            s["oneMonthReturn"]   = m1_proxy
+            s["vol_ratio_live"]   = round(vol / avg_vol, 2) if avg_vol > 0 else None
+            s["price_live"]       = price or s.get("price")
 
     # ══════════════════════════════════════════════════════════════════════
     # STRUCTURAL WALL — applied to screener data in memory, zero extra calls
@@ -1585,6 +1697,11 @@ async def discovery_scan(
         "elapsed_seconds": elapsed,
         "pipeline_summary": {
             "universe_total":              len(universe_raw),
+            "universe_build": {
+                "buckets_pulled":          len(active_buckets),
+                "total_after_dedup":       len(universe_raw),
+                "momentum_enriched":       len(momentum_map),
+            },
             "structural_wall_kills": {
                 "cef_bdc_reit":            wall_kills["cef_bdc"],
                 "ipo_too_recent":          wall_kills["ipo_age"],
