@@ -996,11 +996,58 @@ async def discovery_scan(
     if not isinstance(universe_raw, list) or len(universe_raw) == 0:
         return no_cache({"error": "Universe pull failed or empty", "timestamp": start_ts.isoformat()})
 
-    # Sort by market cap ascending (smaller = more undiscovered)
-    universe_raw.sort(key=lambda x: x.get("marketCap") or 0)
+    # ── CEF / BDC / REIT / ETF hard-kill by industry keywords ─────────────
+    EXCLUDE_INDUSTRIES = {
+        "closed-end fund", "asset management", "exchange traded fund",
+        "diversified financials", "mortgage real estate investment trust",
+        "real estate investment trust", "business development company",
+        "investment trusts/mutual funds", "credit services",
+        "capital markets",  # catches many CEFs/BDCs
+    }
+    EXCLUDE_SECTORS = {
+        # Only exclude if ALSO in a CEF-like industry — don't nuke all financials
+    }
+    # Also exclude by ticker patterns common to CEFs (single letter + number combos handled by industry check)
+    filtered_raw = []
+    for s in universe_raw:
+        industry = (s.get("industry") or "").lower()
+        sector   = (s.get("sector")   or "").lower()
+        name     = (s.get("companyName") or s.get("name") or "").lower()
+        # Industry-level kill
+        if any(excl in industry for excl in EXCLUDE_INDUSTRIES):
+            continue
+        # Name-pattern kills for known CEF structures
+        if any(kw in name for kw in ["closed-end", "closed end", "interval fund",
+                                      "nuveen", "calamos", "pimco dynamic",
+                                      "blackrock tcp", "ares capital"]):
+            continue
+        filtered_raw.append(s)
 
-    # Cap at maxNames — take smallest caps first (best discovery targets)
-    universe = universe_raw[:maxNames]
+    # Sort by market cap ascending (smallest = most undiscovered)
+    filtered_raw.sort(key=lambda x: x.get("marketCap") or 0)
+
+    # Sample across the FULL range, not just top-N
+    # Divide into 4 quartiles and take maxNames/4 from each — ensures coverage
+    total = len(filtered_raw)
+    if total <= maxNames:
+        universe = filtered_raw
+    else:
+        q = total // 4
+        q1 = filtered_raw[:q]                        # smallest caps
+        q2 = filtered_raw[q:q*2]
+        q3 = filtered_raw[q*2:q*3]
+        q4 = filtered_raw[q*3:]                      # largest caps (still <$2B)
+        per_q = maxNames // 4
+        import random
+        random.seed(42)  # reproducible within same day
+        universe = (
+            q1[:per_q] +                             # always take smallest caps in full
+            random.sample(q2, min(per_q, len(q2))) +
+            random.sample(q3, min(per_q, len(q3))) +
+            random.sample(q4, min(per_q, len(q4)))
+        )
+        universe.sort(key=lambda x: x.get("marketCap") or 0)  # re-sort after sampling
+
     symbols = [s["symbol"] for s in universe if s.get("symbol")]
 
     # ── STAGE 2A: FUNDAMENTALS — batch async, 20 at a time ──────────────────
@@ -1224,10 +1271,15 @@ async def discovery_scan(
         composite += (3 if cluster else 0)         # cluster buy = +3
 
         # Tier assignment
+        uni_sector = (uni.get("sector") or "").lower()
         if sscore >= 3 and cluster:
+            tier = "BOTH"
+        elif sscore >= 3 and iscore >= 3:
             tier = "BOTH"
         elif sscore >= 3 and iscore < 3:
             tier = "Tier1-Roth"
+        elif iscore >= 3 and uni_sector in ("financial services", "real estate"):
+            tier = "Tier2-Taxable-Review"   # flag financials for manual review
         elif iscore >= 3:
             tier = "Tier2-Taxable"
         else:
@@ -1292,16 +1344,20 @@ async def discovery_scan(
         "timestamp":       start_ts.isoformat(),
         "elapsed_seconds": elapsed,
         "pipeline_summary": {
-            "universe_total":    len(universe_raw),
-            "universe_scanned":  len(symbols),
-            "survivors_stage2":  len(survivors),
-            "flagged_output":    len(flagged),
+            "universe_total":       len(universe_raw),
+            "universe_after_cef_kill": len(filtered_raw),
+            "universe_scanned":     len(symbols),
+            "survivors_stage2":     len(survivors),
+            "flagged_output":       len(flagged),
+            "cap_range_scanned":    f"${(universe[0].get('marketCap') or 0)/1e6:.0f}M – ${(universe[-1].get('marketCap') or 0)/1e6:.0f}M" if universe else "n/a",
         },
         "filters": {
             "marketCap":       f"${marketCapMin/1e6:.0f}M–${marketCapMax/1e6:.0f}M",
             "sector":          sector or "ALL",
             "minInflection":   minInflection,
             "minSpring":       minSpring,
+            "cef_bdc_excluded": True,
+            "sampling":        "quartile-balanced across full cap range",
         },
         "flagged": flagged,
     })
