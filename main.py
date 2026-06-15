@@ -1282,16 +1282,38 @@ async def discovery_scan(
         "diversified financials", "mortgage real estate investment trust",
         "real estate investment trust", "business development company",
         "investment trusts/mutual funds", "credit services", "capital markets",
+        # Additional REIT structures
+        "reit", "real estate investment trust (reit)",
+        "residential real estate investment trust",
+        "commercial real estate investment trust",
+        "diversified real estate investment trust",
+        "office real estate investment trust",
+        "retail real estate investment trust",
+        "industrial real estate investment trust",
+        "specialty real estate investment trust",
+        "mortgage investment trust",
     }
+    EXCLUDE_SECTORS = {
+        # Kill entire real estate sector — too many income artifacts
+        "real estate",
+    }
+    EXCLUDE_NAME_KEYWORDS = [
+        "closed-end", "closed end", "interval fund",
+        "nuveen", "calamos", "pimco dynamic", "blackrock tcp", "ares capital",
+        # REIT name patterns
+        "realty trust", "realty corp", "reit", "mortgage trust",
+        "property trust", "property income", "income reit",
+    ]
     wall1_passed = []
     for s in universe_raw:
         industry = (s.get("industry") or "").lower()
+        sector   = (s.get("sector")   or "").lower()
         name     = (s.get("companyName") or s.get("name") or "").lower()
         if any(excl in industry for excl in EXCLUDE_INDUSTRIES):
             continue
-        if any(kw in name for kw in ["closed-end", "closed end", "interval fund",
-                                      "nuveen", "calamos", "pimco dynamic",
-                                      "blackrock tcp", "ares capital"]):
+        if sector in EXCLUDE_SECTORS:
+            continue
+        if any(kw in name for kw in EXCLUDE_NAME_KEYWORDS):
             continue
         wall1_passed.append(s)
 
@@ -1613,7 +1635,11 @@ async def discovery_scan(
         else:
             tier = "Watch"
 
-        # Filter: only include if spring score also meets bar
+        # Filter: composite score floor — score 7 goes to watch only if explicitly requested
+        # Default: only output score 8+ to avoid noise (score 7 = watch, not actionable)
+        if composite < 8 and not cluster:
+            continue
+        # Also filter: spring score meets bar
         if sscore < minSpring and not cluster and iscore < 3:
             continue
 
@@ -1646,6 +1672,11 @@ async def discovery_scan(
         # 4. Market cap below floor
         elif mktcap_val < 50_000_000:
             kill_reason = "mktcap_too_small"
+        # 4b. Negative gross margin — burning at the gross level, not investable
+        elif f.get("gross_margins") and len(f["gross_margins"]) > 0:
+            latest_gm = f["gross_margins"][0]
+            if latest_gm < 0:
+                kill_reason = f"negative_gross_margin_{latest_gm:.1f}pct"
         # 5. DEAD TICKER — avg volume < 10,000 (private, delisted, or zombie)
         #    This kills OTC names that went private but still exist in FMP database
         elif avg_vol_live > 0 and avg_vol_live < 10000:
@@ -1737,9 +1768,11 @@ async def discovery_scan(
             "OUTPUT_penny":          "price < $1.00",
             "OUTPUT_beta":           "|beta| > 10",
             "OUTPUT_rev_artifact":   "any QoQ > 10,000%",
-            "OUTPUT_dead_ticker":    "avgVolume < 10,000 — private/delisted/zombie",
-            "OUTPUT_bad_exchange":   "PINK/EXPERT/GREY/OTC exchange — untradeable",
-            "OUTPUT_overbought":     f"RSI proxy > {maxRsi}",
+            "OUTPUT_dead_ticker":       "avgVolume < 10,000 — private/delisted/zombie",
+            "OUTPUT_bad_exchange":      "PINK/EXPERT/GREY/OTC exchange — untradeable",
+            "OUTPUT_negative_margin":   "gross margin < 0% — burning at gross level",
+            "OUTPUT_score_floor":       "composite < 8 (score 7 = watch only, not flagged)",
+            "OUTPUT_overbought":        f"RSI proxy > {maxRsi}",
         },
         "filters": {
             "marketCap":       f"${marketCapMin/1e6:.0f}M–${marketCapMax/1e6:.0f}M",
