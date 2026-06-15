@@ -955,3 +955,316 @@ async def watchlist(_key=Depends(verify_key)):
         })
     return no_cache({"timestamp": datetime.utcnow().isoformat(),
                      "updated": wl.get("updated"), "count": len(output), "watchlist": output})
+
+
+# ── DISCOVERY SCAN — FULL PIPELINE ENDPOINT ───────────────────────────────────
+
+@app.get("/discovery/scan")
+async def discovery_scan(
+    marketCapMin: int = Query(default=50000000),
+    marketCapMax: int = Query(default=2000000000),
+    sector: str = Query(default=None),
+    minInflection: int = Query(default=2),   # min inflection score to survive cut
+    minSpring: int = Query(default=2),        # min spring score to appear in output
+    maxNames: int = Query(default=200),       # cap universe before detailed scan
+    _key=Depends(verify_key)
+):
+    """
+    Full Discovery Pipeline — one call, ranked output.
+    Stage 1: Pull universe (profitable US $50M–$2B)
+    Stage 2: Run fundamentals + insider-cluster in parallel batches
+    Stage 3: Run coiled-spring on survivors
+    Stage 4: Score, rank, return flagged names only
+    """
+    start_ts = datetime.utcnow()
+
+    # ── STAGE 1: UNIVERSE ────────────────────────────────────────────────────
+    async with httpx.AsyncClient(timeout=30) as client:
+        screener_params = {
+            "marketCapMoreThan": marketCapMin,
+            "marketCapLowerThan": marketCapMax,
+            "isEtf": "false",
+            "isActivelyTrading": "true",
+            "country": "US",
+            "netIncomeMoreThan": 0,
+            "limit": 1000,
+        }
+        if sector:
+            screener_params["sector"] = sector
+        universe_raw = await fmp(client, "company-screener", screener_params)
+
+    if not isinstance(universe_raw, list) or len(universe_raw) == 0:
+        return no_cache({"error": "Universe pull failed or empty", "timestamp": start_ts.isoformat()})
+
+    # Sort by market cap ascending (smaller = more undiscovered)
+    universe_raw.sort(key=lambda x: x.get("marketCap") or 0)
+
+    # Cap at maxNames — take smallest caps first (best discovery targets)
+    universe = universe_raw[:maxNames]
+    symbols = [s["symbol"] for s in universe if s.get("symbol")]
+
+    # ── STAGE 2A: FUNDAMENTALS — batch async, 20 at a time ──────────────────
+    async def get_fundamentals(sym, client):
+        income_r, cashflow_r = await asyncio.gather(
+            fmp(client, "income-statement",    {"symbol": sym, "period": "quarter", "limit": 6}),
+            fmp(client, "cash-flow-statement", {"symbol": sym, "period": "quarter", "limit": 6}),
+            return_exceptions=True
+        )
+        revenue_accel = False
+        margin_expansion = False
+        fcf_positive = False
+        fcf_first_positive = False
+        rev_qoq_ge15 = False
+        revenue_pcts = []
+        gross_margins = []
+
+        if isinstance(income_r, list) and len(income_r) >= 3:
+            quarters = income_r[:5]
+            for i in range(len(quarters) - 1):
+                curr = quarters[i].get("revenue") or 0
+                prev = quarters[i+1].get("revenue") or 1
+                if prev != 0:
+                    revenue_pcts.append(round(((curr - prev) / abs(prev)) * 100, 1))
+                gm = quarters[i].get("grossProfitRatio") or 0
+                gross_margins.append(round(gm * 100, 2))
+            if len(revenue_pcts) >= 2:
+                revenue_accel = revenue_pcts[0] > revenue_pcts[1] + 5
+            if len(gross_margins) >= 3:
+                margin_expansion = (gross_margins[0] > gross_margins[1] + 0.5 and
+                                    gross_margins[1] > gross_margins[2] + 0.5)
+            if revenue_pcts:
+                rev_qoq_ge15 = revenue_pcts[0] >= 15
+
+        prev_fcf = []
+        if isinstance(cashflow_r, list) and cashflow_r:
+            for i, q in enumerate(cashflow_r[:6]):
+                fcf = q.get("freeCashFlow") or 0
+                if i == 0:
+                    fcf_positive = fcf > 0
+                else:
+                    prev_fcf.append(fcf)
+            if fcf_positive and prev_fcf:
+                fcf_first_positive = all(v <= 0 for v in prev_fcf[:3])
+
+        score = sum([revenue_accel, margin_expansion, fcf_positive, fcf_first_positive, rev_qoq_ge15])
+        return {
+            "symbol": sym,
+            "inflection_score": score,
+            "signals": {
+                "revenue_accel":       revenue_accel,
+                "margin_expansion_2q": margin_expansion,
+                "fcf_positive":        fcf_positive,
+                "fcf_first_positive":  fcf_first_positive,
+                "rev_qoq_ge15":        rev_qoq_ge15,
+            },
+            "revenue_pcts":   revenue_pcts[:3],
+            "gross_margins":  gross_margins[:3],
+        }
+
+    # ── STAGE 2B: INSIDER CLUSTER — batch async ──────────────────────────────
+    async def get_insider_cluster(sym, client):
+        r = await fmp(client, "insider-trading", {"symbol": sym, "limit": 50})
+        if not isinstance(r, list):
+            return {"symbol": sym, "cluster_detected": False, "distinct_buyers": 0, "total_usd": 0}
+        from datetime import datetime as dt, timedelta
+        cutoff = dt.utcnow() - timedelta(days=14)
+        purchases = []
+        for trade in r:
+            ttype = (trade.get("transactionType") or "").upper()
+            if "PURCHASE" not in ttype and ttype != "P":
+                continue
+            ds = str(trade.get("transactionDate") or trade.get("filingDate") or "")[:10]
+            try:
+                td = dt.strptime(ds, "%Y-%m-%d")
+            except Exception:
+                continue
+            if td < cutoff:
+                continue
+            shares = trade.get("securitiesTransacted") or 0
+            price  = trade.get("price") or 0
+            value  = shares * price
+            if value < 1000:
+                continue
+            purchases.append({"name": trade.get("reportingName") or "Unknown", "value": value})
+        distinct = list({p["name"] for p in purchases})
+        total = sum(p["value"] for p in purchases)
+        return {
+            "symbol":           sym,
+            "cluster_detected": len(distinct) >= 3 and total >= 50000,
+            "distinct_buyers":  len(distinct),
+            "total_usd":        round(total, 0),
+            "buyers":           distinct[:5],
+        }
+
+    # ── STAGE 3: COILED SPRING ───────────────────────────────────────────────
+    async def get_spring(sym, client):
+        quote_r, change_r = await asyncio.gather(
+            fmp(client, "quote", {"symbol": sym}),
+            fmp(client, "stock-price-change", {"symbol": sym}),
+            return_exceptions=True
+        )
+        q = first(quote_r) if not isinstance(quote_r, Exception) else {}
+        c = first(change_r) if not isinstance(change_r, Exception) else {}
+        price   = q.get("price") or 0
+        yh      = q.get("yearHigh") or 1
+        avg_vol = q.get("avgVolume") or 1
+        vol     = q.get("volume") or 0
+        m1      = c.get("1M") or 0
+        m3      = c.get("3M") or 0
+        rsi_proxy, _, rsi_sig = momentum_to_rsi_proxy(c)
+        pct_from_high = round(((yh - price) / yh) * 100, 1) if yh else None
+
+        flat_recent   = abs(m1) < 8
+        rsi_zone      = 45 <= (rsi_proxy or 0) <= 65
+        near_high     = pct_from_high is not None and pct_from_high < 15
+        vol_compress  = vol < avg_vol * 0.85
+        positive_base = m3 > 0
+
+        score = sum([flat_recent, rsi_zone, near_high, vol_compress, positive_base])
+        return {
+            "symbol":       sym,
+            "spring_score": score,
+            "signals": {
+                "flat_1M":       flat_recent,
+                "rsi_45_65":     rsi_zone,
+                "near_52wk_hi":  near_high,
+                "vol_compress":  vol_compress,
+                "positive_3M":   positive_base,
+            },
+            "price":          price,
+            "pct_from_high":  pct_from_high,
+            "rsi_proxy":      rsi_proxy,
+            "rsi_signal":     rsi_sig,
+            "momentum_1M":    m1,
+            "momentum_3M":    m3,
+            "vol_ratio":      round(vol / avg_vol, 2) if avg_vol else None,
+        }
+
+    # ── RUN STAGES 2A + 2B IN PARALLEL BATCHES OF 20 ────────────────────────
+    BATCH = 20
+    fund_results  = []
+    insider_results = []
+
+    async with httpx.AsyncClient(timeout=20) as client:
+        for i in range(0, len(symbols), BATCH):
+            batch = symbols[i:i+BATCH]
+            f_batch, ins_batch = await asyncio.gather(
+                asyncio.gather(*[get_fundamentals(s, client) for s in batch]),
+                asyncio.gather(*[get_insider_cluster(s, client) for s in batch]),
+                return_exceptions=True
+            )
+            if isinstance(f_batch, list):
+                fund_results.extend(f_batch)
+            if isinstance(ins_batch, list):
+                insider_results.extend(ins_batch)
+
+    # Index results
+    fund_map    = {r["symbol"]: r for r in fund_results if isinstance(r, dict)}
+    insider_map = {r["symbol"]: r for r in insider_results if isinstance(r, dict)}
+
+    # Filter survivors: inflection_score >= minInflection OR cluster_detected
+    survivors = []
+    for sym in symbols:
+        f  = fund_map.get(sym, {})
+        ins = insider_map.get(sym, {})
+        iscore = f.get("inflection_score", 0)
+        cluster = ins.get("cluster_detected", False)
+        if iscore >= minInflection or cluster:
+            survivors.append(sym)
+
+    # ── RUN STAGE 3 ON SURVIVORS ONLY ────────────────────────────────────────
+    spring_results = []
+    async with httpx.AsyncClient(timeout=20) as client:
+        for i in range(0, len(survivors), BATCH):
+            batch = survivors[i:i+BATCH]
+            s_batch = await asyncio.gather(
+                *[get_spring(s, client) for s in batch],
+                return_exceptions=True
+            )
+            spring_results.extend([r for r in s_batch if isinstance(r, dict)])
+
+    spring_map = {r["symbol"]: r for r in spring_results}
+
+    # ── SCORE + RANK ─────────────────────────────────────────────────────────
+    # Universe metadata for sector/mktcap lookup
+    uni_map = {s["symbol"]: s for s in universe}
+
+    flagged = []
+    for sym in survivors:
+        f   = fund_map.get(sym, {})
+        ins = insider_map.get(sym, {})
+        sp  = spring_map.get(sym, {})
+        uni = uni_map.get(sym, {})
+
+        iscore  = f.get("inflection_score", 0)
+        sscore  = sp.get("spring_score", 0)
+        cluster = ins.get("cluster_detected", False)
+
+        # Composite score (max 14)
+        composite = 0
+        composite += iscore * 2                    # up to 10 (5 signals × 2)
+        composite += sscore                        # up to 5
+        composite += (3 if cluster else 0)         # cluster buy = +3
+
+        # Tier assignment
+        if sscore >= 3 and cluster:
+            tier = "BOTH"
+        elif sscore >= 3 and iscore < 3:
+            tier = "Tier1-Roth"
+        elif iscore >= 3:
+            tier = "Tier2-Taxable"
+        else:
+            tier = "Watch"
+
+        # Filter: only include if spring score also meets bar
+        if sscore < minSpring and not cluster and iscore < 3:
+            continue
+
+        flagged.append({
+            "symbol":          sym,
+            "name":            uni.get("name") or uni.get("companyName", ""),
+            "sector":          uni.get("sector", ""),
+            "marketCap_M":     round((uni.get("marketCap") or 0) / 1e6, 1),
+            "beta":            uni.get("beta"),
+            "price":           sp.get("price") or uni.get("price"),
+            "composite_score": composite,
+            "inflection_score": iscore,
+            "spring_score":    sscore,
+            "cluster_buy":     cluster,
+            "tier":            tier,
+            "fund_signals":    f.get("signals", {}),
+            "spring_signals":  sp.get("signals", {}),
+            "revenue_qoq":     f.get("revenue_pcts", []),
+            "gross_margins":   f.get("gross_margins", []),
+            "insider_buyers":  ins.get("distinct_buyers", 0),
+            "insider_usd":     ins.get("total_usd", 0),
+            "pct_from_52hi":   sp.get("pct_from_high"),
+            "rsi_proxy":       sp.get("rsi_proxy"),
+            "momentum_1M":     sp.get("momentum_1M"),
+            "momentum_3M":     sp.get("momentum_3M"),
+            "vol_ratio":       sp.get("vol_ratio"),
+        })
+
+    # Sort by composite score descending
+    flagged.sort(key=lambda x: x["composite_score"], reverse=True)
+
+    elapsed = round((datetime.utcnow() - start_ts).total_seconds(), 1)
+
+    return no_cache({
+        "timestamp":       start_ts.isoformat(),
+        "elapsed_seconds": elapsed,
+        "pipeline_summary": {
+            "universe_total":    len(universe_raw),
+            "universe_scanned":  len(symbols),
+            "survivors_stage2":  len(survivors),
+            "flagged_output":    len(flagged),
+        },
+        "filters": {
+            "marketCap":       f"${marketCapMin/1e6:.0f}M–${marketCapMax/1e6:.0f}M",
+            "sector":          sector or "ALL",
+            "minInflection":   minInflection,
+            "minSpring":       minSpring,
+        },
+        "flagged": flagged,
+    })
+
