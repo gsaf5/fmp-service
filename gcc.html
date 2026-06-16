@@ -551,7 +551,6 @@
       <input class="search-input" id="search-input" type="text" placeholder="Filter tickers..." oninput="filterTickers()" />
       <button class="toolbar-btn" onclick="refreshAll()">↺ Refresh</button>
       <button class="toolbar-btn primary" onclick="openAddModal()">+ Add Ticker</button>
-      <button class="toolbar-btn" onclick="runDebug()" id="debug-btn">🔍 Debug API</button>
     </div>
     <div class="last-refresh" id="last-refresh">—</div>
   </div>
@@ -561,7 +560,6 @@
       <div class="section-label">Watchlist</div>
       <div class="ticker-count" id="ticker-count">—</div>
     </div>
-    <div id="debug-out" style="display:none;background:var(--surface2);border:1px solid var(--border2);border-radius:8px;padding:14px;margin-bottom:12px;font-family:var(--font);font-size:11px;color:var(--text2);white-space:pre-wrap;word-break:break-all;max-height:200px;overflow-y:auto"></div>
     <div id="ticker-list"></div>
   </div>
 </div>
@@ -984,23 +982,6 @@ function clearTimers() {
   if (refreshTimer) clearInterval(refreshTimer);
   cronTimers.forEach(clearInterval);
   cronTimers = [];
-}
-
-// ── DEBUG ──
-async function runDebug() {
-  const out = document.getElementById('debug-out');
-  out.style.display = 'block';
-  out.textContent = 'Fetching ' + API_BASE + '/quote?symbols=NVDA ...';
-  try {
-    const res = await fetch(`${API_BASE}/quote?symbols=NVDA`, {
-      headers: { 'x-api-key': API_KEY }
-    });
-    out.textContent = 'HTTP ' + res.status + ' ' + res.statusText + '\n\n';
-    const text = await res.text();
-    out.textContent += text.slice(0, 800);
-  } catch(e) {
-    out.textContent = 'FETCH ERROR: ' + e.message + '\n\nThis is likely a CORS issue when opening the file locally. It will work once deployed to Railway.';
-  }
 }
 
 // ── INIT ──
