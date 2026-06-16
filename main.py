@@ -2,7 +2,7 @@ import os
 import asyncio
 import math
 from datetime import datetime
-from fastapi import FastAPI, Query, Depends, Header, HTTPException, Request
+from fastapi import FastAPI, Query, Depends, Header, HTTPException, Request, BackgroundTasks
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import JSONResponse, HTMLResponse
 import httpx
@@ -2356,58 +2356,77 @@ async def command_center():
 # REPLACE the existing claude_proxy and claude_test functions in main.py with these.
 # Web search lets Claude fetch live prices, YTD data, insider filings, etc.
 
+# ── Anthropic Claude Proxy v3 (async job queue) ───────────────────────────────
+# REPLACE the existing ANTHROPIC_API_KEY, claude_proxy, and claude_test 
+# blocks at the bottom of main.py with this entire block.
+
+import uuid
+
 ANTHROPIC_API_KEY = os.environ.get("ANTHROPIC_API_KEY", "")
 
+# In-memory job store: { job_id: { "status": "pending"|"done"|"error", "text": "..." } }
+_jobs: dict = {}
+
+async def _run_claude_job(job_id: str, system: str, message: str, max_tokens: int):
+    """Runs in background. Stores result in _jobs when complete."""
+    try:
+        async with httpx.AsyncClient(timeout=180) as client:
+            r = await client.post(
+                "https://api.anthropic.com/v1/messages",
+                headers={
+                    "x-api-key": ANTHROPIC_API_KEY,
+                    "anthropic-version": "2023-06-01",
+                    "content-type": "application/json",
+                },
+                json={
+                    "model": "claude-sonnet-4-6",
+                    "max_tokens": max_tokens,
+                    "system": system,
+                    "tools": [{"type": "web_search_20250305", "name": "web_search"}],
+                    "messages": [{"role": "user", "content": message}],
+                }
+            )
+            r.raise_for_status()
+            data = r.json()
+            text = "".join(
+                block.get("text", "")
+                for block in data.get("content", [])
+                if block.get("type") == "text"
+            )
+            _jobs[job_id] = {"status": "done", "text": text}
+    except Exception as e:
+        _jobs[job_id] = {"status": "error", "text": str(e)}
+
+
 @app.post("/claude", dependencies=[Depends(verify_key)])
-async def claude_proxy(request: Request):
+async def claude_proxy(request: Request, background_tasks: BackgroundTasks):
     """
-    Proxies requests to Anthropic API with web search enabled.
-    Body: { "system": "...", "message": "...", "max_tokens": 2000 }
+    Starts a Claude job in the background. Returns job_id immediately.
+    Client polls /claude/result/{job_id} for completion.
+    Body: { "system": "...", "message": "...", "max_tokens": 4000 }
     """
     if not ANTHROPIC_API_KEY:
         raise HTTPException(status_code=500, detail="ANTHROPIC_API_KEY not configured")
 
-    body = await request.json()
+    body       = await request.json()
     system     = body.get("system", "")
     message    = body.get("message", "")
-    max_tokens = min(int(body.get("max_tokens", 2000)), 4000)
+    max_tokens = min(int(body.get("max_tokens", 4000)), 4000)
+    job_id     = str(uuid.uuid4())
 
-    async with httpx.AsyncClient(timeout=120) as client:
-        r = await client.post(
-            "https://api.anthropic.com/v1/messages",
-            headers={
-                "x-api-key": ANTHROPIC_API_KEY,
-                "anthropic-version": "2023-06-01",
-                "content-type": "application/json",
-            },
-            json={
-                "model": "claude-sonnet-4-6",
-                "max_tokens": max_tokens,
-                "system": system,
-                "tools": [
-                    {
-                        "type": "web_search_20250305",
-                        "name": "web_search"
-                    }
-                ],
-                "messages": [{"role": "user", "content": message}],
-            }
-        )
-        r.raise_for_status()
-        data = r.json()
+    _jobs[job_id] = {"status": "pending", "text": ""}
+    background_tasks.add_task(_run_claude_job, job_id, system, message, max_tokens)
 
-    # Extract all text blocks from response (model may interleave tool use and text)
-    text = ""
-    for block in data.get("content", []):
-        if block.get("type") == "text":
-            text += block.get("text", "")
+    return no_cache({"job_id": job_id})
 
-    return no_cache({
-        "text": text,
-        "model": data.get("model", ""),
-        "usage": data.get("usage", {}),
-        "stop_reason": data.get("stop_reason", "")
-    })
+
+@app.get("/claude/result/{job_id}", dependencies=[Depends(verify_key)])
+async def claude_result(job_id: str):
+    """Poll this endpoint every 3 seconds until status is 'done' or 'error'."""
+    job = _jobs.get(job_id)
+    if not job:
+        raise HTTPException(status_code=404, detail="Job not found")
+    return no_cache(job)
 
 
 @app.get("/claude/test", dependencies=[Depends(verify_key)])
