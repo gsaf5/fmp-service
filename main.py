@@ -2434,61 +2434,62 @@ async def claude_test():
     key = os.environ.get("ANTHROPIC_API_KEY", "")
     return {"key_loaded": bool(key), "key_prefix": key[:12] + "..." if key else "MISSING"}
 
-# ── Stock Lookup Endpoint v5 ───────────────────────────────────────────────────
+# ── Stock Lookup Endpoint v6 ─────────────────────────────────────────────────
 # REPLACE the existing /lookup endpoint in main.py with this.
+# Field paths confirmed from /conviction response structure.
 
 @app.get("/lookup", dependencies=[Depends(verify_key)])
 async def stock_lookup(symbol: str = Query(...)):
     sym = symbol.upper().strip()
     async with httpx.AsyncClient() as client:
-        quote_task   = fmp(client, "quote", {"symbol": sym})
+        quote_task   = fmp(client, "quote",                  {"symbol": sym})
+        profile_task = fmp(client, "profile",                {"symbol": sym})
         rsi_task     = fmp(client, "technical-indicators/rsi", {"symbol": sym, "periodLength": 14, "timeframe": "1day"})
-        target_task  = fmp(client, "price-target-consensus", {"symbol": sym})
-        profile_task = fmp(client, "profile", {"symbol": sym})
-        metrics_task = fmp(client, "key-metrics-ttm", {"symbol": sym})
+        change_task  = fmp(client, "stock-price-change",      {"symbol": sym})
+        income_task  = fmp(client, "income-statement",        {"symbol": sym, "limit": 1})
+        grades_task  = fmp(client, "analyst-stock-ratings",   {"symbol": sym, "limit": 5})
+        target_task  = fmp(client, "price-target-consensus",  {"symbol": sym})
 
-        quote_raw, rsi_raw, target_raw, profile_raw, metrics_raw = await asyncio.gather(
-            quote_task, rsi_task, target_task, profile_task, metrics_task
+        quote_raw, profile_raw, rsi_raw, change_raw, income_raw, grades_raw, target_raw = await asyncio.gather(
+            quote_task, profile_task, rsi_task, change_task, income_task, grades_task, target_task
         )
 
     q   = first(quote_raw)
-    tgt = first(target_raw)
     pro = first(profile_raw)
-    met = first(metrics_raw)
+    inc = first(income_raw)
+    tgt = first(target_raw)
+
+    # Price
+    price      = float(q.get("price") or 0)
+    change     = float(q.get("change") or 0)
+    change_pct = float(q.get("changesPercentage") or 0)
 
     # RSI
     rsi_val = None
     if isinstance(rsi_raw, list) and rsi_raw:
-        rsi_val = rsi_raw[0].get("rsi") or rsi_raw[0].get("value")
-    elif isinstance(rsi_raw, dict):
-        rsi_val = rsi_raw.get("rsi") or rsi_raw.get("value")
+        rsi_val = rsi_raw[0].get("rsi")
 
-    # Price / change
-    price      = float(q.get("price") or 0)
-    change     = float(q.get("change") or 0)
-    prev       = price - change if price and change else 0
-    change_pct = round(change / prev * 100, 2) if prev else float(q.get("changesPercentage") or 0)
+    # YTD from stock-price-change
+    chg = first(change_raw) if isinstance(change_raw, list) else (change_raw or {})
+    ytd = float(chg.get("ytd") or chg.get("YTD") or chg.get("ytdChange") or 0) or None
+
+    # EPS from income statement
+    eps = float(inc.get("eps") or inc.get("epsdiluted") or 0) or None
 
     # Analyst target
-    apt = (tgt.get("targetConsensus") or tgt.get("priceTarget") or
-           tgt.get("targetMedian") or q.get("priceAvgTarget") or None)
+    apt = float(tgt.get("targetConsensus") or tgt.get("targetMedian") or 0) or None
 
-    # YTD
-    ytd_pct = float(q.get("ytdChange") or q.get("priceChange1y") or 0) or None
-
-    # Beta
-    beta = pro.get("beta") or q.get("beta") or None
-
-    # Dividend yield — profile has lastDiv (annual $), calculate %
-    last_div = pro.get("lastDiv") or q.get("lastAnnualDividend") or 0
-    div_yield_pct = round(float(last_div) / price * 100, 2) if last_div and price else None
-
-    # EPS TTM — from key-metrics-ttm
-    eps = (met.get("epsTTM") or met.get("eps") or
-           q.get("eps") or pro.get("eps") or None)
-
-    # YTD from stock-price-change — compute separately if needed
-    ytd_raw = float(q.get("ytdChange") or 0)
+    # Recent grades
+    recent = []
+    grades_list = grades_raw if isinstance(grades_raw, list) else []
+    for g in grades_list[:5]:
+        recent.append({
+            "company": g.get("gradingCompany") or g.get("company") or "",
+            "grade":   g.get("newGrade") or g.get("grade") or "",
+            "action":  g.get("action") or "",
+            "date":    g.get("date") or "",
+            "prevGrade": g.get("previousGrade") or "",
+        })
 
     return no_cache({
         "symbol":        q.get("symbol", sym),
@@ -2499,29 +2500,11 @@ async def stock_lookup(symbol: str = Query(...)):
         "yearHigh":      float(q.get("yearHigh") or 0),
         "yearLow":       float(q.get("yearLow") or 0),
         "volume":        int(q.get("volume") or 0),
-        "avgVolume":     int(q.get("avgVolume") or 0) or None,
         "marketCap":     float(q.get("marketCap") or 0),
+        "beta":          float(pro.get("beta") or q.get("beta") or 0) or None,
         "rsi":           float(rsi_val) if rsi_val is not None else None,
-        "analystTarget": float(apt) if apt is not None else None,
-        "ytdPct":        float(q.get("ytdChange") or 0) or None,
-        "beta":          float(beta) if beta is not None else None,
-        "divYieldPct":   div_yield_pct,
-        "eps":           float(eps) if eps is not None else None,
+        "ytdPct":        ytd,
+        "eps":           eps,
+        "analystTarget": apt,
+        "recentGrades":  recent,
     })
-
-@app.get("/debug/lookup", dependencies=[Depends(verify_key)])
-async def debug_lookup(symbol: str = Query(...)):
-    sym = symbol.upper().strip()
-    async with httpx.AsyncClient() as client:
-        results = await asyncio.gather(
-            fmp(client, "profile", {"symbol": sym}),
-            fmp(client, "ratios-ttm", {"symbol": sym}),
-            fmp(client, "key-metrics-ttm", {"symbol": sym}),
-            fmp(client, "stock-price-change", {"symbol": sym}),
-        )
-    return {
-        "profile":     results[0],
-        "ratios_ttm":  results[1],
-        "metrics_ttm": results[2],
-        "price_change": results[3],
-    }
