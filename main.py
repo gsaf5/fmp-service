@@ -135,7 +135,7 @@ async def fetch_watchlist_data():
 # ── Routes ────────────────────────────────────────────────────────────────────
 @app.get("/ping")
 async def ping():
-    return {"status": "ok", "service": "Claude Market API v5.4",
+    return {"status": "ok", "service": "Claude Market API v5.5",
             "ts": datetime.utcnow().isoformat()}
 
 @app.get("/")
@@ -2061,6 +2061,196 @@ async def history_analyze(
         },
         "floor_touch_dates":   [t["date"] for t in floor_touches],
         "ceiling_touch_dates": [t["date"] for t in ceiling_touches],
+    })
+
+
+# ── RANGE SCREEN ENDPOINT ───────────────────────────────────────────────────────
+
+# ── RANGE SCREEN ENDPOINT ─────────────────────────────────────────────────────
+# Master candidate pool of known sideways oscillators by sector.
+# Runs Gate 1 on all candidates, returns only certified setups.
+
+RANGE_CANDIDATES = [
+    # Specialty Equipment / Rental
+    "URI", "HRI", "MGRC", "WLFC", "KFRC", "HURN",
+    # Water / Utilities / Infrastructure
+    "AWR", "AWK", "WTS", "SJW", "MSEX", "YORW", "ARTNA",
+    # Industrial Services / Defense Base
+    "SAIC", "CACI", "LDOS", "ICFI", "KBR", "MANT",
+    # Consumer Staples / Household
+    "CHD", "PBH", "CENT", "CENTA", "IPAR", "AMSF",
+    # Specialty Chemicals / Materials
+    "HWKN", "IOSP", "ASIX", "LIQT", "GOED",
+    # Food Distribution / Packaging
+    "CORE", "JBSS", "SENEA", "SENEB", "LNDC",
+    # Security / Safety
+    "NSSC", "NAPCO", "SCSC", "DGLY",
+    # Financial Services / Insurance
+    "MBIN", "NBTB", "CZWI", "CHMG", "ESSA",
+    # Boring Industrials
+    "EPAC", "BCPC", "NNBR", "NN", "SMID", "DXPE",
+    # Healthcare Services (low binary risk)
+    "MMSI", "ADUS", "AFAM", "AMED",
+]
+
+@app.get("/range-screen")
+async def range_screen(
+    months: int = Query(default=18),
+    _key=Depends(verify_key)
+):
+    """
+    Runs Gate 1 (box width + touch count + round trips) across the full
+    Range Trader candidate pool. Returns certified setups only.
+    Sectors: equipment rental, utilities, consumer staples, industrial services,
+    specialty chemicals, food distribution, security, boring industrials.
+    """
+    from datetime import datetime as dt, timedelta
+
+    from_date = (dt.utcnow() - timedelta(days=int(months * 30.44))).strftime("%Y-%m-%d")
+    to_date   = dt.utcnow().strftime("%Y-%m-%d")
+
+    results   = []
+    certified = []
+    wide_box  = []
+    failures  = []
+
+    async with httpx.AsyncClient(timeout=30.0) as client:
+        for sym in RANGE_CANDIDATES:
+            try:
+                r = await fmp(client, "historical-price-eod/full", {
+                    "symbol": sym,
+                    "from": from_date,
+                    "to": to_date,
+                })
+
+                if isinstance(r, dict) and "historical" in r:
+                    raw = r["historical"]
+                elif isinstance(r, list):
+                    raw = r
+                else:
+                    failures.append({"symbol": sym, "reason": "no data"})
+                    continue
+
+                ohlc = sorted([
+                    {
+                        "date":   str(b.get("date",""))[:10],
+                        "high":   b.get("high"),
+                        "low":    b.get("low"),
+                        "close":  b.get("close") or b.get("adjClose"),
+                        "volume": b.get("volume"),
+                    }
+                    for b in raw if b.get("close") or b.get("adjClose")
+                ], key=lambda x: x["date"])
+
+                if len(ohlc) < 60:
+                    failures.append({"symbol": sym, "reason": f"only {len(ohlc)} bars"})
+                    continue
+
+                closes = [b["close"] for b in ohlc if b["close"]]
+                lows   = [b["low"]   for b in ohlc if b["low"]]
+                highs  = [b["high"]  for b in ohlc if b["high"]]
+
+                # Internal body range (trim 5% extremes)
+                sorted_closes = sorted(closes)
+                trim      = max(1, int(len(sorted_closes) * 0.05))
+                body_low  = sorted_closes[trim]
+                body_high = sorted_closes[-trim]
+                body_width = (body_high - body_low) / body_low * 100
+
+                tolerance     = 0.03
+                floor_level   = body_low  * (1 + tolerance)
+                ceiling_level = body_high * (1 - tolerance)
+
+                # Touch counting
+                floor_touches   = []
+                ceiling_touches = []
+                last_fi = last_ci = -999
+
+                for i, bar in enumerate(ohlc):
+                    lo = bar.get("low")  or 0
+                    hi = bar.get("high") or 0
+                    if lo and lo <= floor_level   and (i - last_fi) >= 10:
+                        floor_touches.append(bar["date"]); last_fi = i
+                    if hi and hi >= ceiling_level and (i - last_ci) >= 10:
+                        ceiling_touches.append(bar["date"]); last_ci = i
+
+                # Round trips
+                all_t = sorted(
+                    [{"date": d, "type": "floor"}   for d in floor_touches] +
+                    [{"date": d, "type": "ceiling"} for d in ceiling_touches],
+                    key=lambda x: x["date"]
+                )
+                direction_changes = 0
+                last_type = None
+                for t in all_t:
+                    if last_type is not None and t["type"] != last_type:
+                        direction_changes += 1
+                    last_type = t["type"]
+                round_trips = direction_changes // 2
+
+                current_price = closes[-1]
+                box_width_ok  = 20 <= body_width <= 40
+
+                # Zone
+                bottom_15 = body_low + (body_high - body_low) * 0.15
+                bottom_30 = body_low + (body_high - body_low) * 0.30
+                if current_price <= bottom_15:
+                    zone = "TIER2_BUY"
+                elif current_price <= bottom_30:
+                    zone = "TIER1_BUY"
+                elif current_price >= ceiling_level:
+                    zone = "NEAR_CEILING"
+                else:
+                    zone = "MID_RANGE"
+
+                entry = {
+                    "symbol":          sym,
+                    "current_price":   round(current_price, 2),
+                    "body_low":        round(body_low, 2),
+                    "body_high":       round(body_high, 2),
+                    "body_width_pct":  round(body_width, 1),
+                    "floor_touches":   len(floor_touches),
+                    "ceiling_touches": len(ceiling_touches),
+                    "round_trips":     round_trips,
+                    "zone":            zone,
+                    "tier2_buy_under": round(bottom_15, 2),
+                    "tier1_buy_under": round(bottom_30, 2),
+                }
+
+                gate1_pass = (
+                    len(floor_touches)   >= 3 and
+                    len(ceiling_touches) >= 3 and
+                    round_trips          >= 2 and
+                    box_width_ok
+                )
+
+                if gate1_pass:
+                    certified.append(entry)
+                elif body_width > 40 and len(floor_touches) >= 3 and len(ceiling_touches) >= 3 and round_trips >= 2:
+                    # Valid oscillator but wide box — flag separately
+                    entry["flag"] = "WIDE_BOX"
+                    wide_box.append(entry)
+                else:
+                    entry["fail_reason"] = (
+                        "box_width" if not box_width_ok else
+                        "touches"   if (len(floor_touches) < 3 or len(ceiling_touches) < 3) else
+                        "round_trips"
+                    )
+                    failures.append(entry)
+
+            except Exception as e:
+                failures.append({"symbol": sym, "reason": str(e)[:80]})
+
+    return no_cache({
+        "timestamp":        dt.utcnow().isoformat(),
+        "months":           months,
+        "candidates_run":   len(RANGE_CANDIDATES),
+        "certified_count":  len(certified),
+        "wide_box_count":   len(wide_box),
+        "certified":        certified,
+        "wide_box_flags":   wide_box,
+        "failure_count":    len(failures),
+        "failures":         failures,
     })
 
 # ── Gary Command Center ───────────────────────────────────────────────────────
