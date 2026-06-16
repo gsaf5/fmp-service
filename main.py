@@ -1784,4 +1784,10 @@ async def discovery_scan(
         },
         "flagged": flagged,
     })
+# ── Gary Command Center ───────────────────────────────────────────────────────
+from pathlib import Path
 
+@app.get("/gcc", response_class=HTMLResponse, include_in_schema=False)
+async def command_center():
+    html_path = Path(__file__).parent / "gcc.html"
+    return HTMLResponse(content=html_path.read_text(), status_code=200)
