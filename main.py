@@ -2260,3 +2260,91 @@ from pathlib import Path
 async def command_center():
     html_path = Path(__file__).parent / "gcc.html"
     return HTMLResponse(content=html_path.read_text(), status_code=200)
+# ── Watchlist price cache (populated by cron) ─────────────────────────────────
+import json, time
+_price_cache: dict = {}
+_cache_ts: float   = 0.0
+
+WATCHLIST_SYMBOLS = [
+    "DVN","CVX","XOM","NOC","LMT","CDRE","MPTI",
+    "NOVT","CVU","ROBO","RBCAA","MU","VOYG","MRVI","FLTCF"
+]
+
+async def _refresh_prices(client: httpx.AsyncClient) -> dict:
+    """Fetch batch quotes for all watchlist symbols and cache them."""
+    global _price_cache, _cache_ts
+    syms = ",".join(WATCHLIST_SYMBOLS)
+    try:
+        r = await client.get(
+            f"{FMP_BASE}/quote",
+            params={"symbol": syms, "apikey": FMP_KEY},
+            timeout=20
+        )
+        r.raise_for_status()
+        data = r.json()
+        arr  = data if isinstance(data, list) else []
+        cache = {}
+        for q in arr:
+            sym = (q.get("symbol") or "").upper()
+            if sym:
+                cache[sym] = {
+                    "price":  q.get("price") or q.get("previousClose") or 0,
+                    "change": q.get("changesPercentage") or 0,
+                    "ts":     time.time(),
+                }
+        _price_cache = cache
+        _cache_ts    = time.time()
+        return {"status": "ok", "symbols": list(cache.keys()), "ts": _cache_ts}
+    except Exception as e:
+        return {"status": "error", "detail": str(e)}
+
+
+# ── Cron endpoint (Railway calls this on schedule) ────────────────────────────
+@app.get("/cron/refresh", dependencies=[Depends(verify_key)])
+async def cron_refresh():
+    """
+    Railway cron hits this endpoint at:
+      7:00 AM, 9:45 AM, 12:00 PM, 3:00 PM, 4:15 PM ET
+    Schedule strings (UTC — ET is UTC-4 in summer):
+      0 11 * * 1-5      →  7:00 AM ET
+      45 13 * * 1-5     →  9:45 AM ET
+      0 16 * * 1-5      → 12:00 PM ET
+      0 19 * * 1-5      →  3:00 PM ET
+      15 20 * * 1-5     →  4:15 PM ET
+    """
+    async with httpx.AsyncClient() as client:
+        result = await _refresh_prices(client)
+    return no_cache(result)
+
+
+# ── Cached prices endpoint (GCC dashboard polls this) ─────────────────────────
+@app.get("/prices", dependencies=[Depends(verify_key)])
+async def get_prices(symbols: str = Query(default="")):
+    """
+    Returns cached prices for all watchlist symbols.
+    Falls back to live fetch if cache is empty or stale (> 10 min).
+    Dashboard calls: GET /prices?symbols=DVN,CVX,XOM,...
+    """
+    global _price_cache, _cache_ts
+    requested = [s.strip().upper() for s in symbols.split(",") if s.strip()]
+    cache_age = time.time() - _cache_ts
+
+    # If cache is fresh (< 10 min), serve it
+    if _price_cache and cache_age < 600:
+        result = {s: _price_cache[s] for s in requested if s in _price_cache}
+        return no_cache({"source": "cache", "age_seconds": int(cache_age), "data": result})
+
+    # Cache stale or empty — do a live fetch
+    async with httpx.AsyncClient() as client:
+        await _refresh_prices(client)
+    result = {s: _price_cache[s] for s in requested if s in _price_cache}
+    return no_cache({"source": "live", "age_seconds": 0, "data": result})
+
+
+# ── GCC Dashboard ─────────────────────────────────────────────────────────────
+from pathlib import Path
+
+@app.get("/gcc", response_class=HTMLResponse, include_in_schema=False)
+async def command_center():
+    html_path = Path(__file__).parent / "gcc.html"
+    return HTMLResponse(content=html_path.read_text(), status_code=200)
