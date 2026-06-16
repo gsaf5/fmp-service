@@ -651,7 +651,7 @@ function pickTicker(symbol) { document.getElementById('conv-ticker').value = sym
 // ══ DISCOVERY ════════════════════════════════════════════════════════
 function runDiscovery() {
   const today = new Date().toLocaleDateString('en-US',{weekday:'long',year:'numeric',month:'long',day:'numeric'});
-  const prompt = `Run supply chain discovery for ${today}. Find Layer 2 and Layer 3 supply chain names with momentum. Apply all hard filters (under 40% YTD, under 8 analysts, under $3B cap, 25%+ divergence gap from headline theme). Run all 7 Phase 0 vetting gates on every candidate. Surface only names that pass everything. Check all themes: Nuclear, Power Infrastructure, Space Supply Chain, Quantum Computing, Memory/Semiconductor Equipment, Defense Autonomy, Robotics, and any emerging theme with momentum today.`;
+  const prompt = `Run discovery. ${today}. Desktop.`;
   window.open('https://claude.ai/new?q=' + encodeURIComponent(prompt), '_blank');
 }
 
@@ -663,7 +663,7 @@ function runConviction() {
   const priceNote = pd ? ` Current price: $${pd.price.toFixed(2)}.` : '';
   const wl = watchlist.find(t=>t.symbol===ticker);
   const zoneNote = wl?.zoneLow ? ` My zone: $${wl.zoneLow}–$${wl.zoneHigh}. Stop: $${wl.stop}. Target: $${wl.target1}.` : '';
-  const prompt = `Run AV conviction score on ${ticker}.${priceNote}${zoneNote} Fetch live data, run the full pre-score pressure test (all 7 gates), and give me a direct verdict with conviction score 1-10, entry, stop, and targets.`;
+  const prompt = `Run AV on ${ticker}, desktop.${priceNote}${zoneNote}`;
   window.open('https://claude.ai/new?q=' + encodeURIComponent(prompt), '_blank');
 }
 
