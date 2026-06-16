@@ -648,31 +648,56 @@ function buildQuickPicks() {
 }
 function pickTicker(symbol) { document.getElementById('conv-ticker').value = symbol; document.getElementById('conv-ticker').focus(); }
 
-// ══ CLAUDE PROXY CALL ════════════════════════════════════════════════
+// ══ CLAUDE PROXY CALL (async job queue) ═════════════════════════════
 async function callClaude(system, message, outputEl, statusEl, btnEl, btnText) {
   outputEl.classList.remove('empty');
   outputEl.textContent = '';
-  statusEl.innerHTML = '<span class="spinner"></span> Running…';
   btnEl.disabled = true;
   btnEl.textContent = '…';
 
+  let elapsed = 0;
+  const statusInterval = setInterval(() => {
+    elapsed += 3;
+    statusEl.innerHTML = `<span class="spinner"></span> Running… ${elapsed}s`;
+  }, 3000);
+
   try {
-    const res = await fetch(`${API_BASE}/claude`, {
+    // Step 1: Start the job
+    const startRes = await fetch(`${API_BASE}/claude`, {
       method: 'POST',
       headers: { 'Content-Type': 'application/json', 'x-api-key': API_KEY },
       body: JSON.stringify({ system, message, max_tokens: 4000 })
     });
-    if (!res.ok) throw new Error('HTTP ' + res.status);
-    const data = await res.json();
-    outputEl.textContent = data.text || 'No response received.';
-    statusEl.innerHTML = '✓ Done';
-    setTimeout(() => { statusEl.innerHTML = ''; }, 3000);
+    if (!startRes.ok) throw new Error('HTTP ' + startRes.status);
+    const { job_id } = await startRes.json();
+
+    // Step 2: Poll for result every 3 seconds
+    while (true) {
+      await new Promise(r => setTimeout(r, 3000));
+      const pollRes = await fetch(`${API_BASE}/claude/result/${job_id}`, {
+        headers: { 'x-api-key': API_KEY }
+      });
+      if (!pollRes.ok) throw new Error('Poll HTTP ' + pollRes.status);
+      const job = await pollRes.json();
+
+      if (job.status === 'done') {
+        outputEl.textContent = job.text || 'No response received.';
+        statusEl.innerHTML = `✓ Done (${elapsed}s)`;
+        setTimeout(() => { statusEl.innerHTML = ''; }, 4000);
+        break;
+      } else if (job.status === 'error') {
+        throw new Error(job.text || 'Claude job failed');
+      }
+      // still pending — keep polling
+    }
+
   } catch(e) {
     outputEl.textContent = 'Error: ' + e.message;
     outputEl.classList.add('empty');
     statusEl.innerHTML = '';
     showToast('Error: ' + e.message, 'error');
   } finally {
+    clearInterval(statusInterval);
     btnEl.disabled = false;
     btnEl.textContent = btnText;
   }
