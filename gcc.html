@@ -370,11 +370,11 @@
           <div class="ai-title">Supply Chain Discovery</div>
           <div class="ai-subtitle">Finds Layer 2/3 supply chain names with momentum.<br>Applies all 7 vetting gates. Only survivors surface.</div>
         </div>
-        <button class="run-btn discovery" id="disc-btn" onclick="runDiscovery()">Run Discovery</button>
+        <button class="run-btn discovery" id="disc-btn" onclick="runDiscovery()">Run Discovery ↗</button>
       </div>
       <hr class="ai-divider">
       <div class="ai-status" id="disc-status"></div>
-      <div class="ai-output empty" id="disc-output">Results will appear here after you run Discovery.</div>
+      <div class="ai-output empty" id="disc-output">Click Run Discovery — opens Claude with your full discovery skill pre-loaded.</div>
     </div>
   </div>
 
@@ -389,7 +389,7 @@
       </div>
       <div class="ticker-input-row">
         <input class="ticker-input" id="conv-ticker" type="text" placeholder="Ticker" maxlength="6" />
-        <button class="run-btn conviction-run" id="conv-btn" onclick="runConviction()">Run Conviction</button>
+        <button class="run-btn conviction-run" id="conv-btn" onclick="runConviction()">Run Conviction ↗</button>
       </div>
       <div>
         <div class="ai-subtitle" style="margin-bottom:6px">Quick pick from watchlist:</div>
@@ -397,7 +397,7 @@
       </div>
       <hr class="ai-divider">
       <div class="ai-status" id="conv-status"></div>
-      <div class="ai-output empty" id="conv-output">Enter a ticker above and tap Run Conviction.</div>
+      <div class="ai-output empty" id="conv-output">Enter a ticker and tap Run Conviction — opens Claude pre-filled with live price and your zone data.</div>
     </div>
   </div>
 
@@ -439,7 +439,6 @@
 const API_BASE   = 'https://mktpxdata72.com';
 const API_KEY    = 'pifk9AGEImYHyoEhjauKbKKAYK_vOzIiVCBjHeWB0G8';
 const PIN_HASH   = '200854';
-const ANTH_MODEL = 'claude-sonnet-4-6';
 
 // ══ STATE ════════════════════════════════════════════════════════════
 let pinBuffer = '', wrongAttempts = 0;
@@ -649,158 +648,23 @@ function buildQuickPicks() {
 }
 function pickTicker(symbol) { document.getElementById('conv-ticker').value = symbol; document.getElementById('conv-ticker').focus(); }
 
-// ══ ANTHROPIC API CALL ═══════════════════════════════════════════════
-async function callClaude(systemPrompt, userMessage, outputEl, statusEl, btnEl) {
-  outputEl.classList.remove('empty');
-  outputEl.textContent = '';
-  statusEl.innerHTML = '<span class="spinner"></span> Thinking…';
-  btnEl.disabled = true;
-
-  const cursor = document.createElement('span');
-  cursor.className = 'streaming-cursor';
-
-  try {
-    const res = await fetch('https://api.anthropic.com/v1/messages', {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({
-        model: ANTH_MODEL,
-        max_tokens: 1000,
-        system: systemPrompt,
-        messages: [{ role: 'user', content: userMessage }]
-      })
-    });
-
-    if (!res.ok) {
-      const err = await res.text();
-      throw new Error(`API ${res.status}: ${err.slice(0,120)}`);
-    }
-
-    const data = await res.json();
-    const text = data.content?.filter(b=>b.type==='text').map(b=>b.text).join('') || '';
-    outputEl.textContent = text;
-    statusEl.innerHTML = '✓ Complete';
-    setTimeout(()=>{ statusEl.innerHTML=''; },3000);
-
-  } catch(e) {
-    outputEl.textContent = 'Error: ' + e.message;
-    outputEl.classList.add('empty');
-    statusEl.innerHTML = '';
-    showToast('Claude API error','error');
-  } finally {
-    btnEl.disabled = false;
-    cursor.remove();
-  }
-}
-
 // ══ DISCOVERY ════════════════════════════════════════════════════════
-const DISCOVERY_SYSTEM = `You are Gary\'s supply chain discovery engine. Gary is a self-directed investor looking for undiscovered Layer 2 and Layer 3 supply chain names BEFORE they run.
-
-HARD FILTERS — every name must pass ALL:
-- YTD return under 40% (over 40% = already discovered)
-- Under 8 analysts covering
-- Under $3B market cap preferred
-- Lagging the headline theme by 25%+ YTD (the gap IS the opportunity)
-- Headline theme confirmed moving 20%+ YTD
-
-THEMES TO CHECK (always scan all, never skip):
-Nuclear, Power Infrastructure/AI Data Centers, Space Supply Chain, Quantum Computing, Memory/Semiconductor Equipment, Defense Autonomy, Robotics, and any emerging theme with momentum today.
-
-LAYER HIERARCHY:
-- Layer 0 (skip): ETFs, large caps, already-known names
-- Layer 1 (verify YTD — often already run)
-- Layer 2 (start here): sub-component manufacturers, specialty material suppliers
-- Layer 3 (best zone): single-source parts, niche engineering, specialty services
-
-PHASE 0 VETTING — every candidate must pass all 7 gates:
-1. Insider selling pattern (kill if net sellers >60% over 90 days)
-2. Balance sheet health (Piotroski F-Score + Altman Z-Score)
-3. Analyst coverage and grade direction (kill if >8 analysts OR 2+ recent downgrades)
-4. Price target vs current price (kill if at or above consensus PT)
-5. Legal/dilution overhang (kill on: class action, SEC investigation, going concern, ATM offering, shelf registration, restatement, subpoena, delisted)
-6. Competitive spec gap (must have specific defensible moat vs incumbent)
-7. Customer concentration (kill if single customer >30% revenue with no multi-year contract)
-
-OUTPUT FORMAT:
-- Start with confirmed themes and momentum evidence
-- For each surviving name: ticker, what they make, why undiscovered (analyst count, cap, YTD%), divergence gap, tier placement (Tier 1 Roth or Tier 2 Taxable)
-- If nothing passes all gates: say so explicitly. Zero is a valid result.
-- Be direct. No filler. Gary reads this before the market opens.`;
-
-async function runDiscovery() {
-  const out = document.getElementById('disc-output');
-  const status = document.getElementById('disc-status');
-  const btn = document.getElementById('disc-btn');
+function runDiscovery() {
   const today = new Date().toLocaleDateString('en-US',{weekday:'long',year:'numeric',month:'long',day:'numeric'});
-  await callClaude(
-    DISCOVERY_SYSTEM,
-    `Run supply chain discovery for ${today}. Find Layer 2 and Layer 3 names with momentum. Apply all filters and vetting gates. Surface only names that pass everything.`,
-    out, status, btn
-  );
+  const prompt = `Run supply chain discovery for ${today}. Find Layer 2 and Layer 3 supply chain names with momentum. Apply all hard filters (under 40% YTD, under 8 analysts, under $3B cap, 25%+ divergence gap from headline theme). Run all 7 Phase 0 vetting gates on every candidate. Surface only names that pass everything. Check all themes: Nuclear, Power Infrastructure, Space Supply Chain, Quantum Computing, Memory/Semiconductor Equipment, Defense Autonomy, Robotics, and any emerging theme with momentum today.`;
+  window.open('https://claude.ai/new?q=' + encodeURIComponent(prompt), '_blank');
 }
 
 // ══ CONVICTION ═══════════════════════════════════════════════════════
-const CONVICTION_SYSTEM = `You are Gary\'s AV conviction scoring engine. Produce a 1–10 conviction score using his exact framework.
-
-SCORING FRAMEWORK:
-- 9-10: Must buy now
-- 7-8: Strong buy
-- 5-6: Watch/hold
-- 3-4: Wait for better entry
-- 1-2: Avoid
-
-RSI SIGNALS:
-- RSI <30: oversold, strong entry
-- RSI 30-50 rising: bullish setup
-- RSI 50-70: neutral
-- RSI >70: overbought, caution
-
-EPS BEATS: 4/4 = +1 conviction, 3/4 = positive, 2/4 = neutral, 1/4 or 0/4 = -1
-
-PEG / TIER:
-- PEG <1.0: Tier 2 Taxable acceptable
-- PEG 1.0-2.0: Tier 2 Taxable acceptable
-- PEG 2.0-3.0: cautious Tier 2
-- PEG 3.0-5.0: Tier 1 Roth only
-- PEG >5.0: Tier 1 Roth only or avoid
-
-PRE-SCORE PRESSURE TEST — answer all before scoring:
-1. Volume Gate: volume trend vs average (10 sessions)
-2. Offering Gate: last offering price vs current
-3. Going Concern Gate: any unresolved warnings?
-4. Catalyst Reality: genuine new info or re-presentation of known data?
-5. Downside Anchor: actual 52-week low and cash/share
-6. Insider Quality: open market buys? % of position? 10b5-1?
-7. Bear Case: 2 sentences — what would make this go down 50%?
-
-Score ceiling rules: going concern unresolved = max 5, stock below offering = max 7, volume below avg with imminent catalyst = max 6.
-
-OUTPUT FORMAT:
-Metric table (P/E, PEG, analyst target, RSI, 52wk range, volume, rev growth, mkt cap)
-EPS last 4 quarters with beat/miss
-Pre-score pressure test results
-CONVICTION SCORE: X/10
-Verdict (2-3 direct sentences, no hedging)
-Bear case
-Tier placement
-Entry / Stop / Target 1 / Target 2
-Biggest single risk`;
-
-async function runConviction() {
+function runConviction() {
   const ticker = (document.getElementById('conv-ticker').value||'').trim().toUpperCase();
   if (!ticker) { showToast('Enter a ticker first','error'); return; }
-  const out = document.getElementById('conv-output');
-  const status = document.getElementById('conv-status');
-  const btn = document.getElementById('conv-btn');
   const pd = priceCache[ticker];
   const priceNote = pd ? ` Current price: $${pd.price.toFixed(2)}.` : '';
   const wl = watchlist.find(t=>t.symbol===ticker);
   const zoneNote = wl?.zoneLow ? ` My zone: $${wl.zoneLow}–$${wl.zoneHigh}. Stop: $${wl.stop}. Target: $${wl.target1}.` : '';
-  await callClaude(
-    CONVICTION_SYSTEM,
-    `Run full AV conviction score on ${ticker}.${priceNote}${zoneNote} Fetch live data, run pre-score pressure test, give me a direct verdict.`,
-    out, status, btn
-  );
+  const prompt = `Run AV conviction score on ${ticker}.${priceNote}${zoneNote} Fetch live data, run the full pre-score pressure test (all 7 gates), and give me a direct verdict with conviction score 1-10, entry, stop, and targets.`;
+  window.open('https://claude.ai/new?q=' + encodeURIComponent(prompt), '_blank');
 }
 
 // ══ TOAST ════════════════════════════════════════════════════════════
