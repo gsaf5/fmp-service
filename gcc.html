@@ -1,0 +1,1019 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>GCC — Gary Command Center</title>
+<style>
+  * { box-sizing: border-box; margin: 0; padding: 0; }
+
+  :root {
+    --bg: #1c1f26;
+    --surface: #252830;
+    --surface2: #2e3240;
+    --surface3: #363a4a;
+    --border: rgba(255,255,255,0.10);
+    --border2: rgba(255,255,255,0.18);
+    --text: #eceef2;
+    --text2: #9ba3b8;
+    --text3: #6b7289;
+    --green: #34d399;
+    --green-dim: rgba(52,211,153,0.13);
+    --red: #f87171;
+    --red-dim: rgba(248,113,113,0.12);
+    --amber: #fbbf24;
+    --amber-dim: rgba(251,191,36,0.13);
+    --blue: #60a5fa;
+    --blue-dim: rgba(96,165,250,0.13);
+    --purple: #a78bfa;
+    --purple-dim: rgba(167,139,250,0.13);
+    --accent: #60a5fa;
+    --font: 'SF Mono', 'Fira Code', 'Courier New', monospace;
+    --sans: -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif;
+  }
+
+  body {
+    background: var(--bg);
+    color: var(--text);
+    font-family: var(--sans);
+    min-height: 100vh;
+    overflow-x: hidden;
+  }
+
+  /* ── PIN SCREEN ── */
+  #pin-screen {
+    position: fixed; inset: 0;
+    background: var(--bg);
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    justify-content: center;
+    z-index: 1000;
+    gap: 32px;
+  }
+
+  #pin-screen.hidden { display: none; }
+
+  .pin-logo-mark {
+    width: 60px; height: 60px;
+    border: 1.5px solid var(--border2);
+    border-radius: 16px;
+    display: flex; align-items: center; justify-content: center;
+    font-family: var(--font);
+    font-size: 18px;
+    font-weight: 700;
+    color: var(--blue);
+    letter-spacing: -1px;
+    background: var(--surface);
+    margin: 0 auto 8px;
+  }
+
+  .pin-title {
+    font-size: 13px;
+    color: var(--text2);
+    letter-spacing: 0.12em;
+    text-transform: uppercase;
+    font-weight: 500;
+    text-align: center;
+  }
+
+  .pin-dots {
+    display: flex;
+    gap: 14px;
+    align-items: center;
+    height: 20px;
+    justify-content: center;
+  }
+
+  .pin-dot {
+    width: 13px; height: 13px;
+    border-radius: 50%;
+    border: 1.5px solid var(--border2);
+    background: transparent;
+    transition: background 0.12s, border-color 0.12s;
+  }
+
+  .pin-dot.filled { background: var(--blue); border-color: var(--blue); }
+  .pin-dot.error  { background: var(--red);  border-color: var(--red); }
+
+  .pin-message {
+    font-size: 12px;
+    color: var(--text3);
+    height: 16px;
+    text-align: center;
+    letter-spacing: 0.04em;
+  }
+
+  .pin-message.error { color: var(--red); }
+
+  .pin-keypad {
+    display: grid;
+    grid-template-columns: repeat(3, 76px);
+    gap: 10px;
+  }
+
+  .pin-key {
+    height: 76px;
+    background: var(--surface);
+    border: 1px solid var(--border2);
+    border-radius: 14px;
+    color: var(--text);
+    font-size: 24px;
+    font-weight: 400;
+    cursor: pointer;
+    display: flex; align-items: center; justify-content: center;
+    transition: background 0.1s, transform 0.08s;
+    user-select: none;
+    -webkit-tap-highlight-color: transparent;
+    font-family: var(--sans);
+  }
+
+  .pin-key:hover  { background: var(--surface2); }
+  .pin-key:active { background: var(--surface3); transform: scale(0.95); }
+  .pin-key.wide   { grid-column: span 2; }
+  .pin-key.del    { font-size: 18px; color: var(--text2); }
+
+  /* ── DASHBOARD ── */
+  #dashboard { display: none; flex-direction: column; min-height: 100vh; }
+  #dashboard.visible { display: flex; }
+
+  /* Header */
+  .header {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    padding: 14px 20px;
+    border-bottom: 1px solid var(--border);
+    position: sticky; top: 0;
+    background: rgba(28,31,38,0.97);
+    backdrop-filter: blur(8px);
+    z-index: 100;
+  }
+
+  .header-left { display: flex; align-items: center; gap: 10px; }
+
+  .header-logo {
+    font-family: var(--font);
+    font-size: 13px;
+    color: var(--blue);
+    font-weight: 700;
+    letter-spacing: -0.5px;
+    border: 1px solid rgba(96,165,250,0.35);
+    padding: 4px 9px;
+    border-radius: 7px;
+    background: var(--blue-dim);
+  }
+
+  .header-title { font-size: 14px; color: var(--text2); font-weight: 400; }
+
+  .header-right { display: flex; align-items: center; gap: 14px; }
+
+  .market-status {
+    display: flex; align-items: center; gap: 6px;
+    font-size: 11px; color: var(--text2);
+    font-family: var(--font);
+  }
+
+  .market-dot {
+    width: 7px; height: 7px;
+    border-radius: 50%;
+    background: var(--green);
+    animation: pulse 2s infinite;
+  }
+
+  .market-dot.closed { background: var(--text3); animation: none; }
+
+  @keyframes pulse { 0%,100%{opacity:1}50%{opacity:.35} }
+
+  .lock-btn {
+    background: var(--surface2);
+    border: 1px solid var(--border);
+    color: var(--text2);
+    cursor: pointer;
+    font-size: 15px;
+    padding: 5px 9px;
+    border-radius: 7px;
+    transition: all 0.15s;
+  }
+
+  .lock-btn:hover { color: var(--text); border-color: var(--border2); }
+
+  /* Cron bar */
+  .cron-bar {
+    display: flex;
+    gap: 8px;
+    padding: 10px 20px;
+    border-bottom: 1px solid var(--border);
+    overflow-x: auto;
+    scrollbar-width: none;
+    background: var(--surface);
+  }
+
+  .cron-bar::-webkit-scrollbar { display: none; }
+
+  .cron-pill {
+    display: flex; align-items: center; gap: 6px;
+    padding: 5px 12px;
+    border-radius: 20px;
+    border: 1px solid var(--border);
+    font-size: 11px;
+    white-space: nowrap;
+    color: var(--text2);
+    background: var(--surface2);
+    font-family: var(--font);
+    flex-shrink: 0;
+  }
+
+  .cron-pill.active { border-color: rgba(96,165,250,0.45); background: var(--blue-dim); color: var(--blue); }
+  .cron-pill.done   { border-color: rgba(52,211,153,0.3);  background: var(--green-dim); color: var(--green); }
+
+  .cron-dot { width: 6px; height: 6px; border-radius: 50%; background: currentColor; opacity: 0.8; }
+
+  /* Toolbar */
+  .toolbar {
+    display: flex; align-items: center; justify-content: space-between;
+    padding: 12px 20px; gap: 10px;
+    background: var(--bg);
+    border-bottom: 1px solid var(--border);
+  }
+
+  .toolbar-left { display: flex; gap: 8px; align-items: center; flex: 1; }
+
+  .search-input {
+    background: var(--surface);
+    border: 1px solid var(--border2);
+    border-radius: 8px;
+    padding: 8px 12px;
+    color: var(--text);
+    font-size: 13px;
+    font-family: var(--sans);
+    width: 200px;
+    outline: none;
+    transition: border-color 0.15s;
+  }
+
+  .search-input:focus { border-color: var(--blue); }
+  .search-input::placeholder { color: var(--text3); }
+
+  .toolbar-btn {
+    background: var(--surface);
+    border: 1px solid var(--border2);
+    border-radius: 8px;
+    padding: 8px 13px;
+    color: var(--text2);
+    font-size: 12px;
+    font-family: var(--sans);
+    cursor: pointer;
+    white-space: nowrap;
+    transition: all 0.1s;
+    display: flex; align-items: center; gap: 5px;
+  }
+
+  .toolbar-btn:hover { background: var(--surface2); color: var(--text); border-color: var(--border2); }
+  .toolbar-btn.primary { border-color: rgba(96,165,250,0.45); color: var(--blue); background: var(--blue-dim); }
+  .toolbar-btn.primary:hover { background: rgba(96,165,250,0.22); }
+
+  .last-refresh { font-size: 11px; color: var(--text3); font-family: var(--font); white-space: nowrap; }
+
+  /* Watchlist */
+  .watchlist { padding: 0 20px 32px; flex: 1; }
+
+  .section-header {
+    display: flex; align-items: center; justify-content: space-between;
+    padding: 16px 0 10px;
+  }
+
+  .section-label { font-size: 11px; color: var(--text3); text-transform: uppercase; letter-spacing: 0.1em; font-weight: 500; }
+  .ticker-count  { font-size: 11px; color: var(--text3); font-family: var(--font); }
+
+  .tier-label {
+    font-size: 10px; color: var(--text3);
+    text-transform: uppercase; letter-spacing: 0.1em;
+    padding: 14px 0 6px;
+    border-top: 1px solid var(--border);
+    font-family: var(--font);
+    margin-top: 4px;
+  }
+
+  .tier-first { border-top: none; padding-top: 4px; }
+
+  /* Ticker card */
+  .ticker-card {
+    background: var(--surface);
+    border: 1px solid var(--border);
+    border-radius: 12px;
+    padding: 14px 16px;
+    margin-bottom: 7px;
+    display: flex;
+    align-items: center;
+    gap: 14px;
+    transition: border-color 0.15s, background 0.15s;
+  }
+
+  .ticker-card:hover { background: var(--surface2); border-color: var(--border2); }
+  .ticker-card.in-zone    { border-left: 3px solid var(--green); }
+  .ticker-card.above-zone { border-left: 3px solid var(--amber); }
+  .ticker-card.below-zone { border-left: 3px solid var(--text3); }
+  .ticker-card.no-zone    { border-left: 3px solid var(--purple); }
+
+  .ticker-meta { min-width: 80px; }
+
+  .ticker-symbol {
+    font-family: var(--font);
+    font-size: 14px; font-weight: 700;
+    color: var(--text);
+    letter-spacing: 0.02em;
+  }
+
+  .ticker-name { font-size: 11px; color: var(--text3); margin-top: 2px; }
+
+  .ticker-price-block { text-align: right; min-width: 80px; }
+
+  .ticker-price {
+    font-family: var(--font);
+    font-size: 16px; font-weight: 600;
+    color: var(--text);
+    letter-spacing: -0.5px;
+  }
+
+  .ticker-change { font-family: var(--font); font-size: 11px; margin-top: 2px; }
+  .ticker-change.pos  { color: var(--green); }
+  .ticker-change.neg  { color: var(--red); }
+  .ticker-change.flat { color: var(--text3); }
+
+  .zone-block { min-width: 100px; }
+
+  .zone-badge {
+    padding: 4px 10px;
+    border-radius: 20px;
+    font-size: 10px; font-weight: 600;
+    letter-spacing: 0.05em;
+    text-transform: uppercase;
+    white-space: nowrap;
+    font-family: var(--font);
+    text-align: center;
+    display: inline-block;
+    width: 100%;
+  }
+
+  .zone-badge.in-zone    { background: var(--green-dim);  color: var(--green);  border: 1px solid rgba(52,211,153,0.3); }
+  .zone-badge.above-zone { background: var(--amber-dim);  color: var(--amber);  border: 1px solid rgba(251,191,36,0.3); }
+  .zone-badge.below-zone { background: rgba(255,255,255,0.05); color: var(--text2); border: 1px solid var(--border); }
+  .zone-badge.no-zone    { background: var(--purple-dim); color: var(--purple); border: 1px solid rgba(167,139,250,0.3); }
+  .zone-badge.loading    { background: var(--surface3); color: var(--text3); border: 1px solid var(--border); animation: shimmer 1.4s infinite; }
+  .zone-badge.stale      { background: var(--surface3); color: var(--text2); border: 1px solid var(--border2); }
+
+  @keyframes shimmer { 0%,100%{opacity:1}50%{opacity:.4} }
+
+  .zone-from { font-size: 10px; color: var(--text3); font-family: var(--font); margin-top: 3px; text-align: center; }
+
+  .ticker-zone-range {
+    flex: 1;
+    font-size: 13px;
+    color: var(--text3);
+    font-family: var(--font);
+    min-width: 0;
+  }
+
+  .zone-range-line { margin-bottom: 2px; }
+  .zone-range-line span { color: var(--text); }
+
+  .ticker-actions { display: flex; gap: 6px; align-items: center; flex-shrink: 0; }
+
+  .action-btn {
+    background: var(--surface2);
+    border: 1px solid var(--border);
+    border-radius: 7px;
+    padding: 6px 10px;
+    font-size: 11px; color: var(--text2);
+    cursor: pointer; white-space: nowrap;
+    transition: all 0.1s;
+    font-family: var(--sans);
+  }
+
+  .action-btn:hover { border-color: var(--border2); color: var(--text); background: var(--surface3); }
+  .action-btn.conviction { color: var(--blue); border-color: rgba(96,165,250,0.35); background: var(--blue-dim); }
+  .action-btn.conviction:hover { background: rgba(96,165,250,0.22); }
+  .action-btn.remove:hover { color: var(--red); border-color: rgba(248,113,113,0.35); background: var(--red-dim); }
+
+  /* Modal */
+  .modal-overlay {
+    position: fixed; inset: 0;
+    background: rgba(0,0,0,0.55);
+    display: none; align-items: center; justify-content: center;
+    z-index: 500;
+  }
+
+  .modal-overlay.visible { display: flex; }
+
+  .modal {
+    background: var(--surface2);
+    border: 1px solid var(--border2);
+    border-radius: 16px;
+    padding: 24px;
+    width: 380px;
+    max-width: calc(100vw - 32px);
+  }
+
+  .modal-title { font-size: 15px; font-weight: 600; color: var(--text); margin-bottom: 18px; }
+
+  .modal-field { margin-bottom: 12px; }
+
+  .modal-label {
+    font-size: 10px; color: var(--text3);
+    text-transform: uppercase; letter-spacing: 0.08em;
+    margin-bottom: 5px; display: block;
+    font-family: var(--font);
+  }
+
+  .modal-input {
+    width: 100%;
+    background: var(--surface);
+    border: 1px solid var(--border2);
+    border-radius: 8px;
+    padding: 9px 12px;
+    color: var(--text); font-size: 13px;
+    font-family: var(--font);
+    outline: none; transition: border-color 0.15s;
+  }
+
+  .modal-input:focus { border-color: var(--blue); }
+  .modal-input::placeholder { color: var(--text3); }
+
+  .modal-row { display: grid; grid-template-columns: 1fr 1fr; gap: 10px; }
+
+  .modal-actions { display: flex; gap: 8px; margin-top: 20px; }
+
+  .modal-btn {
+    flex: 1; padding: 10px;
+    border-radius: 8px; font-size: 13px;
+    cursor: pointer; border: 1px solid var(--border2);
+    font-family: var(--sans); transition: all 0.1s;
+  }
+
+  .modal-btn.cancel { background: var(--surface); color: var(--text2); }
+  .modal-btn.cancel:hover { color: var(--text); }
+  .modal-btn.save { background: var(--blue); color: #0f1117; border-color: var(--blue); font-weight: 600; }
+  .modal-btn.save:hover { background: #93c5fd; }
+
+  /* Empty state */
+  .empty-state { text-align: center; padding: 56px 20px; color: var(--text3); font-size: 13px; }
+
+  /* Toast */
+  .toast {
+    position: fixed; bottom: 24px; left: 50%;
+    transform: translateX(-50%);
+    background: var(--surface3);
+    border: 1px solid var(--border2);
+    border-radius: 8px;
+    padding: 10px 18px;
+    font-size: 12px; color: var(--text2);
+    z-index: 999; display: none; white-space: nowrap;
+    font-family: var(--font);
+    box-shadow: 0 4px 24px rgba(0,0,0,0.4);
+  }
+
+  .toast.visible { display: block; }
+  .toast.error   { border-color: rgba(248,113,113,0.45); color: var(--red); }
+  .toast.success { border-color: rgba(52,211,153,0.4);   color: var(--green); }
+
+  /* Scrollbar */
+  ::-webkit-scrollbar { width: 4px; }
+  ::-webkit-scrollbar-track { background: transparent; }
+  ::-webkit-scrollbar-thumb { background: var(--border2); border-radius: 2px; }
+
+  @media (max-width: 600px) {
+    .ticker-zone-range { display: none; }
+    .ticker-name { display: none; }
+    .zone-block { min-width: 80px; }
+  }
+</style>
+</head>
+<body>
+
+<!-- PIN SCREEN -->
+<div id="pin-screen">
+  <div>
+    <div class="pin-logo-mark">GCC</div>
+    <div class="pin-title">Command Center</div>
+  </div>
+  <div class="pin-dots" id="pin-dots">
+    <div class="pin-dot" id="dot-0"></div>
+    <div class="pin-dot" id="dot-1"></div>
+    <div class="pin-dot" id="dot-2"></div>
+    <div class="pin-dot" id="dot-3"></div>
+    <div class="pin-dot" id="dot-4"></div>
+    <div class="pin-dot" id="dot-5"></div>
+  </div>
+  <div class="pin-message" id="pin-message">Enter 6-digit PIN</div>
+  <div class="pin-keypad">
+    <button class="pin-key" onclick="pinPress('1')">1</button>
+    <button class="pin-key" onclick="pinPress('2')">2</button>
+    <button class="pin-key" onclick="pinPress('3')">3</button>
+    <button class="pin-key" onclick="pinPress('4')">4</button>
+    <button class="pin-key" onclick="pinPress('5')">5</button>
+    <button class="pin-key" onclick="pinPress('6')">6</button>
+    <button class="pin-key" onclick="pinPress('7')">7</button>
+    <button class="pin-key" onclick="pinPress('8')">8</button>
+    <button class="pin-key" onclick="pinPress('9')">9</button>
+    <button class="pin-key wide" onclick="pinPress('0')">0</button>
+    <button class="pin-key del" onclick="pinDel()">⌫</button>
+  </div>
+</div>
+
+<!-- DASHBOARD -->
+<div id="dashboard">
+
+  <div class="header">
+    <div class="header-left">
+      <div class="header-logo">GCC</div>
+      <div class="header-title">Command Center</div>
+    </div>
+    <div class="header-right">
+      <div class="market-status">
+        <div class="market-dot" id="market-dot"></div>
+        <span id="market-label">MARKET</span>
+      </div>
+      <button class="lock-btn" onclick="lockDashboard()" title="Lock">🔒</button>
+    </div>
+  </div>
+
+  <div class="cron-bar" id="cron-bar">
+    <div class="cron-pill" id="cron-700"><div class="cron-dot"></div>7:00 AM Pre-Market</div>
+    <div class="cron-pill" id="cron-945"><div class="cron-dot"></div>9:45 AM Morning Scan</div>
+    <div class="cron-pill" id="cron-1200"><div class="cron-dot"></div>12:00 PM Midday</div>
+    <div class="cron-pill" id="cron-1500"><div class="cron-dot"></div>3:00 PM Afternoon</div>
+    <div class="cron-pill" id="cron-1615"><div class="cron-dot"></div>4:15 PM Close</div>
+  </div>
+
+  <div class="toolbar">
+    <div class="toolbar-left">
+      <input class="search-input" id="search-input" type="text" placeholder="Filter tickers..." oninput="filterTickers()" />
+      <button class="toolbar-btn" onclick="refreshAll()">↺ Refresh</button>
+      <button class="toolbar-btn primary" onclick="openAddModal()">+ Add Ticker</button>
+      <button class="toolbar-btn" onclick="runDebug()" id="debug-btn">🔍 Debug API</button>
+    </div>
+    <div class="last-refresh" id="last-refresh">—</div>
+  </div>
+
+  <div class="watchlist">
+    <div class="section-header">
+      <div class="section-label">Watchlist</div>
+      <div class="ticker-count" id="ticker-count">—</div>
+    </div>
+    <div id="debug-out" style="display:none;background:var(--surface2);border:1px solid var(--border2);border-radius:8px;padding:14px;margin-bottom:12px;font-family:var(--font);font-size:11px;color:var(--text2);white-space:pre-wrap;word-break:break-all;max-height:200px;overflow-y:auto"></div>
+    <div id="ticker-list"></div>
+  </div>
+</div>
+
+<!-- ADD MODAL -->
+<div class="modal-overlay" id="modal-overlay" onclick="closeModalOnBg(event)">
+  <div class="modal">
+    <div class="modal-title">Add to Watchlist</div>
+    <div class="modal-field">
+      <label class="modal-label">Ticker Symbol</label>
+      <input class="modal-input" id="m-symbol" type="text" placeholder="AAPL" style="text-transform:uppercase" />
+    </div>
+    <div class="modal-field">
+      <label class="modal-label">Company Name (optional)</label>
+      <input class="modal-input" id="m-name" type="text" placeholder="Apple Inc." />
+    </div>
+    <div class="modal-field">
+      <label class="modal-label">Tier</label>
+      <select class="modal-input" id="m-tier">
+        <option value="1">Tier 1 — Roth / Aggressive</option>
+        <option value="2">Tier 2 — Taxable / Long-term</option>
+        <option value="3">Tier 3 — IRA / Steady</option>
+        <option value="0">Watchlist Only</option>
+      </select>
+    </div>
+    <div class="modal-row">
+      <div class="modal-field">
+        <label class="modal-label">Buy Zone Low</label>
+        <input class="modal-input" id="m-zone-low" type="number" step="0.01" placeholder="0.00" />
+      </div>
+      <div class="modal-field">
+        <label class="modal-label">Buy Zone High</label>
+        <input class="modal-input" id="m-zone-high" type="number" step="0.01" placeholder="0.00" />
+      </div>
+    </div>
+    <div class="modal-row">
+      <div class="modal-field">
+        <label class="modal-label">Stop Loss</label>
+        <input class="modal-input" id="m-stop" type="number" step="0.01" placeholder="0.00" />
+      </div>
+      <div class="modal-field">
+        <label class="modal-label">Target 1</label>
+        <input class="modal-input" id="m-target1" type="number" step="0.01" placeholder="0.00" />
+      </div>
+    </div>
+    <div class="modal-actions">
+      <button class="modal-btn cancel" onclick="closeModal()">Cancel</button>
+      <button class="modal-btn save" onclick="saveTicker()">Add Ticker</button>
+    </div>
+  </div>
+</div>
+
+<div class="toast" id="toast"></div>
+
+<script>
+const API_BASE = 'https://mktpxdata72.com';
+const API_KEY  = 'pifk9AGEImYHyoEhjauKbKKAYK_vOzIiVCBjHeWB0G8';
+const PIN_HASH = '200854';
+
+let pinBuffer = '';
+let wrongAttempts = 0;
+let watchlist = [];
+let priceCache = {};
+let refreshTimer = null;
+let cronTimers  = [];
+
+// ── STORAGE ──
+function saveWatchlist() {
+  try { localStorage.setItem('gcc_watchlist', JSON.stringify(watchlist)); } catch(e) {}
+}
+
+function loadWatchlist() {
+  try {
+    const raw = localStorage.getItem('gcc_watchlist');
+    if (raw) { watchlist = JSON.parse(raw); return; }
+  } catch(e) {}
+  watchlist = [
+    { symbol:'NVDA', name:'Nvidia',       tier:1, zoneLow:110, zoneHigh:125, stop:98,  target1:155 },
+    { symbol:'PLTR', name:'Palantir',     tier:1, zoneLow:88,  zoneHigh:96,  stop:78,  target1:120 },
+    { symbol:'RKLB', name:'Rocket Lab',   tier:1, zoneLow:18,  zoneHigh:22,  stop:14,  target1:32  },
+    { symbol:'SPY',  name:'S&P 500 ETF',  tier:2, zoneLow:505, zoneHigh:520, stop:490, target1:545 },
+    { symbol:'DVN',  name:'Devon Energy', tier:2, zoneLow:30,  zoneHigh:34,  stop:26,  target1:44  },
+  ];
+  saveWatchlist();
+}
+
+// ── PIN ──
+function pinPress(digit) {
+  if (pinBuffer.length >= 6) return;
+  pinBuffer += digit;
+  updateDots();
+  if (pinBuffer.length === 6) setTimeout(checkPin, 120);
+}
+
+function pinDel() {
+  if (!pinBuffer.length) return;
+  pinBuffer = pinBuffer.slice(0, -1);
+  updateDots();
+}
+
+function updateDots(state) {
+  for (let i = 0; i < 6; i++) {
+    const d = document.getElementById('dot-' + i);
+    d.className = 'pin-dot';
+    if (state === 'error') { d.classList.add('error'); continue; }
+    if (i < pinBuffer.length) d.classList.add('filled');
+  }
+}
+
+function checkPin() {
+  if (pinBuffer === PIN_HASH) {
+    document.getElementById('pin-screen').classList.add('hidden');
+    const dash = document.getElementById('dashboard');
+    dash.style.display = 'flex';
+    dash.classList.add('visible');
+    wrongAttempts = 0; pinBuffer = '';
+    updateDots();
+    initDashboard();
+  } else {
+    wrongAttempts++;
+    updateDots('error');
+    const msg = document.getElementById('pin-message');
+    const left = 3 - wrongAttempts;
+    msg.className = 'pin-message error';
+    msg.textContent = left > 0
+      ? `Incorrect — ${left} attempt${left===1?'':'s'} left`
+      : 'Too many attempts';
+    setTimeout(() => {
+      pinBuffer = ''; updateDots();
+      msg.className = 'pin-message';
+      msg.textContent = 'Enter 6-digit PIN';
+    }, 1300);
+  }
+}
+
+function lockDashboard() {
+  document.getElementById('dashboard').classList.remove('visible');
+  document.getElementById('dashboard').style.display = 'none';
+  document.getElementById('pin-screen').classList.remove('hidden');
+  pinBuffer = ''; updateDots();
+  clearTimers();
+}
+
+document.addEventListener('keydown', e => {
+  if (document.getElementById('pin-screen').classList.contains('hidden')) return;
+  if (e.key >= '0' && e.key <= '9') pinPress(e.key);
+  if (e.key === 'Backspace') pinDel();
+});
+
+// ── MARKET HOURS ──
+function getET() {
+  return new Date(new Date().toLocaleString('en-US', { timeZone: 'America/New_York' }));
+}
+
+function isMarketOpen() {
+  const et = getET();
+  const day = et.getDay();
+  if (day === 0 || day === 6) return false;
+  const mins = et.getHours() * 60 + et.getMinutes();
+  return mins >= 570 && mins < 960;
+}
+
+function updateMarketStatus() {
+  const open = isMarketOpen();
+  document.getElementById('market-dot').className   = 'market-dot' + (open ? '' : ' closed');
+  document.getElementById('market-label').textContent = open ? 'OPEN' : 'CLOSED';
+}
+
+// ── CRON BAR ──
+const CRON_WINDOWS = [
+  { id:'cron-700',  h:7,  m:0  },
+  { id:'cron-945',  h:9,  m:45 },
+  { id:'cron-1200', h:12, m:0  },
+  { id:'cron-1500', h:15, m:0  },
+  { id:'cron-1615', h:16, m:15 },
+];
+
+function updateCronBar() {
+  const et = getET();
+  const cur = et.getHours() * 60 + et.getMinutes();
+  CRON_WINDOWS.forEach(w => {
+    const el = document.getElementById(w.id);
+    const wm = w.h * 60 + w.m;
+    el.className = 'cron-pill';
+    if (Math.abs(cur - wm) <= 5) el.classList.add('active');
+    else if (cur > wm)           el.classList.add('done');
+  });
+}
+
+// ── PRICE FETCH ──
+async function fetchPrices(symbols) {
+  if (!symbols.length) return {};
+  try {
+    const url = `${API_BASE}/quote?symbols=${symbols.join(',')}`;
+    const res = await fetch(url, {
+      headers: { 'x-api-key': API_KEY }
+    });
+    if (!res.ok) throw new Error('HTTP ' + res.status);
+    const raw  = await res.text();
+    console.log('[GCC] /quote raw response:', raw.slice(0, 500));
+    let data;
+    try { data = JSON.parse(raw); } catch(pe) { throw new Error('JSON parse error: ' + raw.slice(0,80)); }
+    // Support every common FMP/proxy response shape
+    let arr = [];
+    if (Array.isArray(data))          arr = data;
+    else if (Array.isArray(data.data))   arr = data.data;
+    else if (Array.isArray(data.quotes)) arr = data.quotes;
+    else if (data.price !== undefined)   arr = [data];   // single-ticker object
+    else {
+      // Last resort: treat object values as quote objects
+      arr = Object.values(data).filter(v => v && typeof v === 'object');
+    }
+    console.log('[GCC] parsed arr length:', arr.length, arr[0]);
+    const map = {};
+    arr.forEach(q => {
+      const sym = (q.symbol || q.ticker || q.Symbol || '').toUpperCase();
+      if (!sym) return;
+      const price = parseFloat(
+        q.price ?? q.last ?? q.close ?? q.regularMarketPrice ??
+        q.previousClose ?? q.adjClose ?? 0
+      );
+      const change = parseFloat(
+        q.changesPercentage ?? q.change_pct ?? q.changePercent ??
+        q.regularMarketChangePercent ?? q.pct_change ?? 0
+      );
+      map[sym] = { price, change, stale: !isMarketOpen() };
+    });
+    if (!Object.keys(map).length) {
+      showToast('API returned no quotes — check console', 'error');
+      console.warn('[GCC] no quotes parsed from', data);
+    }
+    return map;
+  } catch(e) {
+    const msg = e.message || String(e);
+    if (msg.includes('Failed to fetch') || msg.includes('NetworkError') || msg.includes('CORS')) {
+      showToast('CORS/network error — works after deploy to Railway', 'error');
+    } else {
+      showToast('Price fetch: ' + msg, 'error');
+    }
+    console.error('[GCC] fetchPrices error:', e);
+    return {};
+  }
+}
+
+// ── ZONE LOGIC ──
+function getZoneStatus(t, price) {
+  if (!t.zoneLow && !t.zoneHigh) return 'no-zone';
+  if (!price) return 'no-zone';
+  if (price >= t.zoneLow && price <= t.zoneHigh) return 'in-zone';
+  return price > t.zoneHigh ? 'above-zone' : 'below-zone';
+}
+
+const ZONE_LABEL = { 'in-zone':'In Zone', 'above-zone':'Above Zone', 'below-zone':'Below Zone', 'no-zone':'No Zone' };
+
+function getZonePct(t, price) {
+  if (!price || (!t.zoneLow && !t.zoneHigh)) return '';
+  const status = getZoneStatus(t, price);
+  if (status === 'in-zone') return 'IN ZONE';
+  const ref = status === 'above-zone' ? t.zoneHigh : t.zoneLow;
+  if (!ref) return '';
+  const pct = ((price - ref) / ref * 100).toFixed(1);
+  return `${pct > 0 ? '+' : ''}${pct}% vs zone`;
+}
+
+// ── RENDER ──
+const TIER_NAMES = {
+  '1':'Tier 1 — Roth / Aggressive',
+  '2':'Tier 2 — Taxable / Long-term',
+  '3':'Tier 3 — IRA / Steady',
+  '0':'Watchlist Only',
+};
+
+function renderList(data) {
+  const filter   = (document.getElementById('search-input').value || '').toUpperCase();
+  const filtered = watchlist.filter(t =>
+    !filter || t.symbol.includes(filter) || (t.name||'').toUpperCase().includes(filter)
+  );
+
+  document.getElementById('ticker-count').textContent =
+    `${watchlist.length} ticker${watchlist.length !== 1 ? 's' : ''}`;
+
+  if (!filtered.length) {
+    document.getElementById('ticker-list').innerHTML =
+      `<div class="empty-state">No tickers match. Add one with + Add Ticker.</div>`;
+    return;
+  }
+
+  const grouped = {};
+  filtered.forEach(t => {
+    const tier = String(t.tier ?? '0');
+    if (!grouped[tier]) grouped[tier] = [];
+    grouped[tier].push(t);
+  });
+
+  let html = '';
+  let first = true;
+  ['1','2','3','0'].forEach(tier => {
+    if (!grouped[tier]) return;
+    html += `<div class="tier-label ${first ? 'tier-first' : ''}">${TIER_NAMES[tier]}</div>`;
+    first = false;
+    grouped[tier].forEach(t => {
+      const pd      = data[t.symbol];
+      const price   = pd ? pd.price  : null;
+      const change  = pd ? pd.change : null;
+      const stale   = pd ? pd.stale  : false;
+      const loading = pd === undefined;
+      const status  = price !== null ? getZoneStatus(t, price) : 'no-zone';
+      const pctStr  = price !== null ? getZonePct(t, price) : '';
+      const chClass = !change ? 'flat' : change > 0 ? 'pos' : 'neg';
+      const chStr   = change !== null ? `${change > 0 ? '+' : ''}${change.toFixed(2)}%` : '';
+      const priceStr  = price !== null ? `$${price.toFixed(2)}` : (loading ? '···' : '—');
+      const priceNote = stale && price !== null ? '<span style="font-size:9px;color:var(--text3);margin-left:4px">cls</span>' : '';
+
+      const zoneRange = (t.zoneLow || t.zoneHigh)
+        ? `<div class="zone-range-line">Zone <span>$${t.zoneLow}–$${t.zoneHigh}</span></div>
+           <div class="zone-range-line">Stop <span>$${t.stop||'—'}</span> &nbsp;·&nbsp; T1 <span>$${t.target1||'—'}</span></div>`
+        : `<div style="color:var(--text3);font-size:12px">No zone set</div>`;
+
+      const badgeClass = loading ? 'loading' : status;
+      const badgeText  = loading ? '···' : ZONE_LABEL[status] + (stale ? ' ·Cls' : '');
+
+      html += `
+        <div class="ticker-card ${status}">
+          <div class="ticker-meta">
+            <div class="ticker-symbol">${t.symbol} <span style="font-size:14px;font-weight:500;color:var(--text);font-family:var(--font);margin-left:6px">${priceStr}</span>${priceNote}</div>
+            <div class="ticker-name">${t.name||''} ${chStr ? '<span class="ticker-change ' + chClass + '">' + chStr + '</span>' : ''}</div>
+          </div>
+          <div class="ticker-zone-range">${zoneRange}</div>
+          <div class="zone-block">
+            <div class="zone-badge ${badgeClass}">${badgeText}</div>
+            <div class="zone-from">${pctStr}</div>
+          </div>
+          <div class="ticker-actions">
+            <button class="action-btn conviction" onclick="openConviction('${t.symbol}')">Conviction ↗</button>
+            <button class="action-btn remove" onclick="removeTicker('${t.symbol}')">✕</button>
+          </div>
+        </div>`;
+    });
+  });
+
+  document.getElementById('ticker-list').innerHTML = html;
+}
+
+// ── REFRESH ──
+async function refreshAll() {
+  if (!watchlist.length) { renderList({}); return; }
+  renderList({});
+  const data = await fetchPrices(watchlist.map(t => t.symbol));
+  priceCache = data;
+  renderList(data);
+  const et = getET().toLocaleTimeString('en-US', { hour:'2-digit', minute:'2-digit' });
+  document.getElementById('last-refresh').textContent = `Updated ${et} ET`;
+}
+
+function filterTickers() { renderList(priceCache); }
+
+// ── ADD / REMOVE ──
+function openAddModal() {
+  ['m-symbol','m-name','m-zone-low','m-zone-high','m-stop','m-target1'].forEach(id => {
+    document.getElementById(id).value = '';
+  });
+  document.getElementById('m-tier').value = '1';
+  document.getElementById('modal-overlay').classList.add('visible');
+  setTimeout(() => document.getElementById('m-symbol').focus(), 50);
+}
+
+function closeModal()        { document.getElementById('modal-overlay').classList.remove('visible'); }
+function closeModalOnBg(e)   { if (e.target.id === 'modal-overlay') closeModal(); }
+
+function saveTicker() {
+  const symbol = (document.getElementById('m-symbol').value || '').trim().toUpperCase();
+  if (!symbol) { showToast('Enter a ticker symbol', 'error'); return; }
+  if (watchlist.find(t => t.symbol === symbol)) { showToast(`${symbol} already in list`, 'error'); return; }
+  watchlist.push({
+    symbol,
+    name:     document.getElementById('m-name').value.trim(),
+    tier:     parseInt(document.getElementById('m-tier').value) || 0,
+    zoneLow:  parseFloat(document.getElementById('m-zone-low').value)  || 0,
+    zoneHigh: parseFloat(document.getElementById('m-zone-high').value) || 0,
+    stop:     parseFloat(document.getElementById('m-stop').value)      || 0,
+    target1:  parseFloat(document.getElementById('m-target1').value)   || 0,
+  });
+  saveWatchlist();
+  closeModal();
+  showToast(`${symbol} added`, 'success');
+  refreshAll();
+}
+
+function removeTicker(symbol) {
+  watchlist = watchlist.filter(t => t.symbol !== symbol);
+  delete priceCache[symbol];
+  saveWatchlist();
+  renderList(priceCache);
+  showToast(`${symbol} removed`);
+}
+
+// ── CONVICTION ──
+function openConviction(symbol) {
+  const t = watchlist.find(t => t.symbol === symbol);
+  const price = priceCache[symbol] ? `$${priceCache[symbol].price.toFixed(2)}` : 'current price';
+  const zone  = t?.zoneLow ? `Zone $${t.zoneLow}–$${t.zoneHigh}` : 'no zone set';
+  window.open(
+    `https://claude.ai/new?q=${encodeURIComponent(`Run AV conviction score on ${symbol}. Price: ${price}. ${zone}. Tier ${t?.tier||'?'}.`)}`,
+    '_blank'
+  );
+}
+
+// ── TOAST ──
+let toastTimer;
+function showToast(msg, type) {
+  const t = document.getElementById('toast');
+  t.textContent = msg;
+  t.className = 'toast visible' + (type ? ` ${type}` : '');
+  clearTimeout(toastTimer);
+  toastTimer = setTimeout(() => { t.className = 'toast'; }, 2800);
+}
+
+// ── TIMERS ──
+function clearTimers() {
+  if (refreshTimer) clearInterval(refreshTimer);
+  cronTimers.forEach(clearInterval);
+  cronTimers = [];
+}
+
+// ── DEBUG ──
+async function runDebug() {
+  const out = document.getElementById('debug-out');
+  out.style.display = 'block';
+  out.textContent = 'Fetching ' + API_BASE + '/quote?symbols=NVDA ...';
+  try {
+    const res = await fetch(`${API_BASE}/quote?symbols=NVDA`, {
+      headers: { 'x-api-key': API_KEY }
+    });
+    out.textContent = 'HTTP ' + res.status + ' ' + res.statusText + '\n\n';
+    const text = await res.text();
+    out.textContent += text.slice(0, 800);
+  } catch(e) {
+    out.textContent = 'FETCH ERROR: ' + e.message + '\n\nThis is likely a CORS issue when opening the file locally. It will work once deployed to Railway.';
+  }
+}
+
+// ── INIT ──
+function initDashboard() {
+  loadWatchlist();
+  updateMarketStatus();
+  updateCronBar();
+  refreshAll();
+  clearTimers();
+  refreshTimer = setInterval(() => { if (isMarketOpen()) refreshAll(); }, 60000);
+  cronTimers.push(setInterval(updateMarketStatus, 30000));
+  cronTimers.push(setInterval(updateCronBar, 60000));
+}
+</script>
+</body>
+</html>
