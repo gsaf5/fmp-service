@@ -2434,66 +2434,61 @@ async def claude_test():
     key = os.environ.get("ANTHROPIC_API_KEY", "")
     return {"key_loaded": bool(key), "key_prefix": key[:12] + "..." if key else "MISSING"}
 
-# ── Stock Lookup Endpoint v6 ─────────────────────────────────────────────────
+# ── Stock Lookup Endpoint v7 ─────────────────────────────────────────────────
 # REPLACE the existing /lookup endpoint in main.py with this.
-# Field paths confirmed from /conviction response structure.
+# Pulls from /conviction endpoint internally — confirmed working fields.
 
 @app.get("/lookup", dependencies=[Depends(verify_key)])
-async def stock_lookup(symbol: str = Query(...)):
+async def stock_lookup(symbol: str = Query(...), x_api_key: str = Header(default=None), apikey: str = Query(default=None)):
     sym = symbol.upper().strip()
-    async with httpx.AsyncClient() as client:
-        quote_task   = fmp(client, "quote",                  {"symbol": sym})
-        profile_task = fmp(client, "profile",                {"symbol": sym})
-        rsi_task     = fmp(client, "technical-indicators/rsi", {"symbol": sym, "periodLength": 14, "timeframe": "1day"})
-        change_task  = fmp(client, "stock-price-change",      {"symbol": sym})
-        income_task  = fmp(client, "income-statement",        {"symbol": sym, "limit": 1})
-        grades_task  = fmp(client, "analyst-stock-ratings",   {"symbol": sym, "limit": 5})
-        target_task  = fmp(client, "price-target-consensus",  {"symbol": sym})
+    key = x_api_key or apikey or ""
 
-        quote_raw, profile_raw, rsi_raw, change_raw, income_raw, grades_raw, target_raw = await asyncio.gather(
-            quote_task, profile_task, rsi_task, change_task, income_task, grades_task, target_task
+    # Call our own /conviction endpoint — all fields confirmed working
+    async with httpx.AsyncClient(timeout=30) as client:
+        r = await client.get(
+            f"http://localhost:{os.environ.get('PORT', 8080)}/conviction",
+            params={"symbol": sym},
+            headers={"x-api-key": key}
         )
+        if not r.is_success:
+            raise HTTPException(status_code=r.status_code, detail="Conviction fetch failed")
+        data = r.json()
 
-    q   = first(quote_raw)
-    pro = first(profile_raw)
-    inc = first(income_raw)
-    tgt = first(target_raw)
+    q   = data.get("quote", {})
+    pro = data.get("profile", {})
+    tec = data.get("technicals", {})
+    fun = data.get("fundamentals", {})
+    ana = data.get("analyst", {})
 
-    # Price
     price      = float(q.get("price") or 0)
     change     = float(q.get("change") or 0)
     change_pct = float(q.get("changesPercentage") or 0)
+    if not change_pct and price and change:
+        prev = price - change
+        change_pct = round(change / prev * 100, 2) if prev else 0
 
-    # RSI
-    rsi_val = None
-    if isinstance(rsi_raw, list) and rsi_raw:
-        rsi_val = rsi_raw[0].get("rsi")
+    rsi = float(tec.get("rsi_proxy") or 0) or None
+    ytd = float((tec.get("momentum") or {}).get("ytd") or 0) or None
 
-    # YTD from stock-price-change
-    chg = first(change_raw) if isinstance(change_raw, list) else (change_raw or {})
-    ytd = float(chg.get("ytd") or chg.get("YTD") or chg.get("ytdChange") or 0) or None
+    rev = (fun.get("revenue_trend") or [{}])
+    eps = float(rev[0].get("eps") or 0) if rev else None
 
-    # EPS from income statement
-    eps = float(inc.get("eps") or inc.get("epsdiluted") or 0) or None
+    pts = ana.get("price_targets", {})
+    apt = float(pts.get("last_month_avg") or pts.get("last_quarter_avg") or 0) or None
 
-    # Analyst target
-    apt = float(tgt.get("targetConsensus") or tgt.get("targetMedian") or 0) or None
-
-    # Recent grades
-    recent = []
-    grades_list = grades_raw if isinstance(grades_raw, list) else []
-    for g in grades_list[:5]:
-        recent.append({
-            "company": g.get("gradingCompany") or g.get("company") or "",
-            "grade":   g.get("newGrade") or g.get("grade") or "",
-            "action":  g.get("action") or "",
-            "date":    g.get("date") or "",
-            "prevGrade": g.get("previousGrade") or "",
-        })
+    grades     = ana.get("grades", {})
+    recent_raw = grades.get("recent_grades") or []
+    recent = [{
+        "company":   g.get("company", ""),
+        "grade":     g.get("grade", ""),
+        "action":    g.get("action", ""),
+        "date":      g.get("date", ""),
+        "prevGrade": g.get("prevGrade", ""),
+    } for g in recent_raw[:5]]
 
     return no_cache({
-        "symbol":        q.get("symbol", sym),
-        "name":          q.get("name") or pro.get("companyName") or "",
+        "symbol":        data.get("symbol", sym),
+        "name":          pro.get("name", ""),
         "price":         price,
         "change":        change,
         "changePct":     change_pct,
@@ -2501,8 +2496,8 @@ async def stock_lookup(symbol: str = Query(...)):
         "yearLow":       float(q.get("yearLow") or 0),
         "volume":        int(q.get("volume") or 0),
         "marketCap":     float(q.get("marketCap") or 0),
-        "beta":          float(pro.get("beta") or q.get("beta") or 0) or None,
-        "rsi":           float(rsi_val) if rsi_val is not None else None,
+        "beta":          float(pro.get("beta") or 0) or None,
+        "rsi":           rsi,
         "ytdPct":        ytd,
         "eps":           eps,
         "analystTarget": apt,
