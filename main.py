@@ -2434,9 +2434,9 @@ async def claude_test():
     key = os.environ.get("ANTHROPIC_API_KEY", "")
     return {"key_loaded": bool(key), "key_prefix": key[:12] + "..." if key else "MISSING"}
 
-# ── Stock Lookup Endpoint v9 ─────────────────────────────────────────────────
+# ── Stock Lookup Endpoint FINAL ───────────────────────────────────────────────
 # REPLACE the existing /lookup endpoint in main.py with this.
-# Uses price-target endpoint directly for analyst rows — includes price targets natively.
+# Uses conviction for all data. recentGrades from conviction analyst.grades.recent_grades.
 
 @app.get("/lookup", dependencies=[Depends(verify_key)])
 async def stock_lookup(symbol: str = Query(...), x_api_key: str = Header(default=None), apikey: str = Query(default=None)):
@@ -2444,19 +2444,14 @@ async def stock_lookup(symbol: str = Query(...), x_api_key: str = Header(default
     key = x_api_key or apikey or ""
 
     async with httpx.AsyncClient(timeout=30) as client:
-        conv_task   = client.get(
+        r = await client.get(
             f"http://localhost:{os.environ.get('PORT', 8080)}/conviction",
             params={"symbol": sym},
             headers={"x-api-key": key}
         )
-        # price-target returns: analystCompany, priceTarget, newsTitle, newsURL, newsPublisher, dateUpdated, newGrade
-        target_task = fmp(client, "price-target", {"symbol": sym, "limit": 5})
-
-        conv_resp, target_raw = await asyncio.gather(conv_task, target_task)
-
-    if not conv_resp.is_success:
-        raise HTTPException(status_code=conv_resp.status_code, detail="Conviction fetch failed")
-    data = conv_resp.json()
+    if not r.is_success:
+        raise HTTPException(status_code=r.status_code, detail="Lookup failed")
+    data = r.json()
 
     q   = data.get("quote", {})
     pro = data.get("profile", {})
@@ -2473,27 +2468,21 @@ async def stock_lookup(symbol: str = Query(...), x_api_key: str = Header(default
 
     rsi = float(tec.get("rsi_proxy") or 0) or None
     ytd = float((tec.get("momentum") or {}).get("ytd") or 0) or None
-    rev = (fun.get("revenue_trend") or [{}])
+    rev = fun.get("revenue_trend") or [{}]
     eps = float(rev[0].get("eps") or 0) if rev else None
     pts = ana.get("price_targets", {})
     apt = float(pts.get("last_month_avg") or pts.get("last_quarter_avg") or 0) or None
 
-    # Build analyst rows from price-target endpoint — has company + target natively
-    target_list = target_raw if isinstance(target_raw, list) else []
-    recent = []
-    for t in target_list[:5]:
-        company = t.get("analystCompany") or t.get("company") or ""
-        pt      = t.get("priceTarget") or t.get("price_target") or None
-        grade   = t.get("newGrade") or t.get("grade") or ""
-        date    = (t.get("dateUpdated") or t.get("date") or "")[:10]
-        recent.append({
-            "company":     company,
-            "grade":       grade,
-            "action":      "",         # price-target endpoint doesn't have upgrade/downgrade
-            "date":        date,
-            "prevGrade":   t.get("previousGrade") or t.get("prevGrade") or "",
-            "priceTarget": float(pt) if pt else None,
-        })
+    grades     = ana.get("grades", {})
+    recent_raw = grades.get("recent_grades") or []
+    recent = [{
+        "company":     g.get("company", ""),
+        "grade":       g.get("grade", ""),
+        "action":      g.get("action", ""),
+        "date":        g.get("date", ""),
+        "prevGrade":   g.get("prevGrade", ""),
+        "priceTarget": None,
+    } for g in recent_raw[:5]]
 
     return no_cache({
         "symbol":        data.get("symbol", sym),
