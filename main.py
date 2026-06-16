@@ -1807,7 +1807,7 @@ async def history(
     to_date   = dt.utcnow().strftime("%Y-%m-%d")
 
     async with httpx.AsyncClient() as client:
-        r = await fmp(client, "historical-price-full", {
+        r = await fmp(client, "historical-price-eod/full", {
             "symbol": sym,
             "from": from_date,
             "to": to_date,
