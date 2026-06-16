@@ -2352,21 +2352,24 @@ async def command_center():
 # Add this to the bottom of main.py
 # Requires: ANTHROPIC_API_KEY environment variable set in Railway
 
+# ── Anthropic Claude Proxy v2 (with web search) ───────────────────────────────
+# REPLACE the existing claude_proxy and claude_test functions in main.py with these.
+# Web search lets Claude fetch live prices, YTD data, insider filings, etc.
+
 ANTHROPIC_API_KEY = os.environ.get("ANTHROPIC_API_KEY", "")
 
 @app.post("/claude", dependencies=[Depends(verify_key)])
 async def claude_proxy(request: Request):
     """
-    Proxies requests to Anthropic API server-side.
-    Avoids CORS issues — browser calls this endpoint, Railway calls Anthropic.
+    Proxies requests to Anthropic API with web search enabled.
     Body: { "system": "...", "message": "...", "max_tokens": 2000 }
     """
     if not ANTHROPIC_API_KEY:
         raise HTTPException(status_code=500, detail="ANTHROPIC_API_KEY not configured")
 
     body = await request.json()
-    system  = body.get("system", "")
-    message = body.get("message", "")
+    system     = body.get("system", "")
+    message    = body.get("message", "")
     max_tokens = min(int(body.get("max_tokens", 2000)), 4000)
 
     async with httpx.AsyncClient(timeout=120) as client:
@@ -2381,18 +2384,32 @@ async def claude_proxy(request: Request):
                 "model": "claude-sonnet-4-6",
                 "max_tokens": max_tokens,
                 "system": system,
+                "tools": [
+                    {
+                        "type": "web_search_20250305",
+                        "name": "web_search"
+                    }
+                ],
                 "messages": [{"role": "user", "content": message}],
             }
         )
         r.raise_for_status()
         data = r.json()
 
+    # Extract all text blocks from response (model may interleave tool use and text)
     text = ""
     for block in data.get("content", []):
         if block.get("type") == "text":
             text += block.get("text", "")
 
-    return no_cache({"text": text, "model": data.get("model",""), "usage": data.get("usage",{})})
+    return no_cache({
+        "text": text,
+        "model": data.get("model", ""),
+        "usage": data.get("usage", {}),
+        "stop_reason": data.get("stop_reason", "")
+    })
+
+
 @app.get("/claude/test", dependencies=[Depends(verify_key)])
 async def claude_test():
     key = os.environ.get("ANTHROPIC_API_KEY", "")
