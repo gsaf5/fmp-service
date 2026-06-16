@@ -408,7 +408,7 @@
           </div>
           <div style="text-align:right">
             <div class="lookup-price" id="lk-price">—</div>
-            <div class="lookup-change" id="lk-change"></div>
+            <div id="lk-change" class="lookup-change flat"></div>
           </div>
         </div>
         <div class="lookup-grid">
@@ -418,7 +418,7 @@
           <div class="lookup-metric"><div class="lookup-metric-label">Mkt Cap</div><div class="lookup-metric-value" id="lk-cap">—</div></div>
           <div class="lookup-metric"><div class="lookup-metric-label">YTD %</div><div class="lookup-metric-value" id="lk-ytd">—</div></div>
           <div class="lookup-metric"><div class="lookup-metric-label">Beta</div><div class="lookup-metric-value" id="lk-beta">—</div></div>
-          <div class="lookup-metric"><div class="lookup-metric-label">Vol vs Avg</div><div class="lookup-metric-value" id="lk-vol">—</div></div>
+          <div class="lookup-metric"><div class="lookup-metric-label">Volume</div><div class="lookup-metric-value" id="lk-vol">—</div></div>
           <div class="lookup-metric"><div class="lookup-metric-label">Div Yield</div><div class="lookup-metric-value" id="lk-div">—</div></div>
           <div class="lookup-metric"><div class="lookup-metric-label">EPS (TTM)</div><div class="lookup-metric-value" id="lk-eps">—</div></div>
         </div>
@@ -678,7 +678,7 @@ function renderList(data) {
   const filter=(document.getElementById('search-input').value||'').toUpperCase();
   const filtered=watchlist.filter(t=>!filter||t.symbol.includes(filter)||(t.name||'').toUpperCase().includes(filter));
   document.getElementById('ticker-count').textContent=`${watchlist.length} ticker${watchlist.length!==1?'s':''}`;
-  if (!filtered.length) { const lkVisible = document.getElementById('lookup-card').classList.contains('visible'); document.getElementById('ticker-list').innerHTML = lkVisible ? '' : '<div style="text-align:center;padding:40px;color:var(--text3);font-size:13px">No tickers found in watchlist.</div>'; return; }
+  if (!filtered.length) { if (!document.getElementById('lookup-card').classList.contains('visible')) { document.getElementById('ticker-list').innerHTML = '<div style="text-align:center;padding:40px;color:var(--text3);font-size:13px">No tickers in watchlist.</div>'; } return; }
   const grouped={};
   filtered.forEach(t=>{ const k=String(t.tier??'0'); if(!grouped[k])grouped[k]=[]; grouped[k].push(t); });
   let html='',first=true;
@@ -923,49 +923,92 @@ async function runLookup(symbol) {
   lookupSymbol = symbol;
   const card = document.getElementById('lookup-card');
   card.classList.add('visible');
+
+  // Reset all fields to loading state
   document.getElementById('lk-symbol').textContent = symbol;
-  document.getElementById('lk-name').textContent = '';
-  document.getElementById('lk-price').textContent = '···';
+  document.getElementById('lk-name').textContent   = '';
+  document.getElementById('lk-price').textContent  = '···';
   document.getElementById('lk-change').textContent = '';
   ['lk-range','lk-rsi','lk-target','lk-cap','lk-ytd','lk-beta','lk-vol','lk-div','lk-eps'].forEach(id => {
     document.getElementById(id).textContent = '···';
   });
 
+  // Hide watchlist no-match text while lookup is open
+  document.getElementById('ticker-list').innerHTML = '';
+
   try {
-    // Single /lookup call — returns price, change$, change%, RSI, analyst target, all in one shot
-    const res = await fetch(`${API_BASE}/lookup?symbol=${symbol}`, { headers: {'x-api-key': API_KEY} });
+    const res = await fetch(`${API_BASE}/lookup?symbol=${symbol}`, {
+      headers: {'x-api-key': API_KEY}
+    });
     if (!res.ok) throw new Error('HTTP ' + res.status);
     const q = await res.json();
     lookupData = q;
 
-    const price     = parseFloat(q.price || 0);
-    const dollarChg = parseFloat(q.change || 0);
-    const pctChg    = parseFloat(q.changePct || 0);
-    const chClass   = dollarChg >= 0 ? 'pos' : 'neg';
-    const chStr     = `${dollarChg >= 0 ? '+' : ''}\$${Math.abs(dollarChg).toFixed(2)}  (${pctChg >= 0 ? '+' : ''}${parseFloat(pctChg).toFixed(2)}%)`;
-    const yearHigh  = parseFloat(q.yearHigh || 0);
-    const yearLow   = parseFloat(q.yearLow  || 0);
-    const vol       = parseInt(q.volume || 0);
-    const cap       = parseFloat(q.marketCap || 0);
-    const pe        = parseFloat(q.pe || 0);
-    const rsi       = q.rsi != null ? parseFloat(q.rsi) : null;
-    const apt       = q.analystTarget != null ? parseFloat(q.analystTarget) : null;
+    // Price and change
+    const price     = q.price != null ? parseFloat(q.price) : null;
+    const chgDollar = q.change != null ? parseFloat(q.change) : null;
+    const chgPct    = q.changePct != null ? parseFloat(q.changePct) : null;
+    const isPos     = chgDollar != null ? chgDollar >= 0 : null;
 
     document.getElementById('lk-symbol').textContent = q.symbol || symbol;
     document.getElementById('lk-name').textContent   = q.name || '';
-    document.getElementById('lk-price').textContent  = price ? `$${price.toFixed(2)}` : '—';
+    document.getElementById('lk-price').textContent  = price != null ? `$${price.toFixed(2)}` : '—';
+
     const chEl = document.getElementById('lk-change');
-    chEl.textContent = chStr;
-    chEl.className   = `lookup-change ${chClass}`;
-    document.getElementById('lk-range').textContent  = (yearLow && yearHigh) ? `$${yearLow.toFixed(2)} – $${yearHigh.toFixed(2)}` : '—';
-    document.getElementById('lk-vol').textContent    = vol ? (vol > 1e6 ? `${(vol/1e6).toFixed(1)}M` : `${(vol/1e3).toFixed(0)}K`) : '—';
-    document.getElementById('lk-cap').textContent    = cap ? (cap > 1e9 ? `$${(cap/1e9).toFixed(1)}B` : `$${(cap/1e6).toFixed(0)}M`) : '—';
-    document.getElementById('lk-pe').textContent     = pe ? pe.toFixed(1) : '—';
-    document.getElementById('lk-rsi').textContent    = rsi != null ? rsi.toFixed(1) : '—';
+    if (chgDollar != null && chgPct != null) {
+      const sign = chgDollar >= 0 ? '+' : '-';
+      chEl.textContent = `${sign}$${Math.abs(chgDollar).toFixed(2)}  (${chgPct >= 0 ? '+' : ''}${chgPct.toFixed(2)}%)`;
+      chEl.className   = `lookup-change ${isPos ? 'pos' : 'neg'}`;
+    } else {
+      chEl.textContent = '—';
+      chEl.className   = 'lookup-change flat';
+    }
+
+    // 52wk Range
+    const yHigh = q.yearHigh != null ? parseFloat(q.yearHigh) : null;
+    const yLow  = q.yearLow  != null ? parseFloat(q.yearLow)  : null;
+    document.getElementById('lk-range').textContent = (yHigh && yLow) ? `$${yLow.toFixed(2)} – $${yHigh.toFixed(2)}` : '—';
+
+    // RSI
+    const rsi = q.rsi != null ? parseFloat(q.rsi) : null;
+    const rsiStr = rsi != null ? rsi.toFixed(1) : '—';
+    document.getElementById('lk-rsi').textContent = rsiStr;
+
+    // Analyst Target
+    const apt = q.analystTarget != null ? parseFloat(q.analystTarget) : null;
     document.getElementById('lk-target').textContent = apt != null ? `$${apt.toFixed(2)}` : '—';
+
+    // Market Cap
+    const cap = q.marketCap != null ? parseFloat(q.marketCap) : null;
+    document.getElementById('lk-cap').textContent = cap != null
+      ? (cap > 1e12 ? `$${(cap/1e12).toFixed(2)}T` : cap > 1e9 ? `$${(cap/1e9).toFixed(1)}B` : `$${(cap/1e6).toFixed(0)}M`)
+      : '—';
+
+    // YTD %
+    const ytd = q.ytdPct != null ? parseFloat(q.ytdPct) : null;
+    document.getElementById('lk-ytd').textContent = ytd != null ? `${ytd >= 0 ? '+' : ''}${ytd.toFixed(2)}%` : '—';
+
+    // Beta
+    const beta = q.beta != null ? parseFloat(q.beta) : null;
+    document.getElementById('lk-beta').textContent = beta != null ? beta.toFixed(2) : '—';
+
+    // Volume
+    const vol = q.volume != null ? parseInt(q.volume) : null;
+    document.getElementById('lk-vol').textContent = vol != null
+      ? (vol > 1e6 ? `${(vol/1e6).toFixed(1)}M` : `${(vol/1e3).toFixed(0)}K`)
+      : '—';
+
+    // Dividend Yield
+    const divY = q.divYieldPct != null ? parseFloat(q.divYieldPct) : null;
+    document.getElementById('lk-div').textContent = divY != null ? `${divY.toFixed(2)}%` : '—';
+
+    // EPS
+    const eps = q.eps != null ? parseFloat(q.eps) : null;
+    document.getElementById('lk-eps').textContent = eps != null ? `$${eps.toFixed(2)}` : '—';
 
   } catch(e) {
     document.getElementById('lk-price').textContent = 'Error';
+    document.getElementById('lk-name').textContent  = e.message;
     showToast('Lookup failed: ' + e.message, 'error');
   }
 }
