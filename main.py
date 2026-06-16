@@ -2348,3 +2348,48 @@ from pathlib import Path
 async def command_center():
     html_path = Path(__file__).parent / "gcc.html"
     return HTMLResponse(content=html_path.read_text(), status_code=200)
+# ── Anthropic Claude Proxy ────────────────────────────────────────────────────
+# Add this to the bottom of main.py
+# Requires: ANTHROPIC_API_KEY environment variable set in Railway
+
+ANTHROPIC_API_KEY = os.environ.get("ANTHROPIC_API_KEY", "")
+
+@app.post("/claude", dependencies=[Depends(verify_key)])
+async def claude_proxy(request: Request):
+    """
+    Proxies requests to Anthropic API server-side.
+    Avoids CORS issues — browser calls this endpoint, Railway calls Anthropic.
+    Body: { "system": "...", "message": "...", "max_tokens": 2000 }
+    """
+    if not ANTHROPIC_API_KEY:
+        raise HTTPException(status_code=500, detail="ANTHROPIC_API_KEY not configured")
+
+    body = await request.json()
+    system  = body.get("system", "")
+    message = body.get("message", "")
+    max_tokens = min(int(body.get("max_tokens", 2000)), 4000)
+
+    async with httpx.AsyncClient(timeout=120) as client:
+        r = await client.post(
+            "https://api.anthropic.com/v1/messages",
+            headers={
+                "x-api-key": ANTHROPIC_API_KEY,
+                "anthropic-version": "2023-06-01",
+                "content-type": "application/json",
+            },
+            json={
+                "model": "claude-sonnet-4-6",
+                "max_tokens": max_tokens,
+                "system": system,
+                "messages": [{"role": "user", "content": message}],
+            }
+        )
+        r.raise_for_status()
+        data = r.json()
+
+    text = ""
+    for block in data.get("content", []):
+        if block.get("type") == "text":
+            text += block.get("text", "")
+
+    return no_cache({"text": text, "model": data.get("model",""), "usage": data.get("usage",{})})
