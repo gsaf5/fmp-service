@@ -2434,25 +2434,30 @@ async def claude_test():
     key = os.environ.get("ANTHROPIC_API_KEY", "")
     return {"key_loaded": bool(key), "key_prefix": key[:12] + "..." if key else "MISSING"}
 
-# ── Stock Lookup Endpoint v7 ─────────────────────────────────────────────────
+# ── Stock Lookup Endpoint v8 ─────────────────────────────────────────────────
 # REPLACE the existing /lookup endpoint in main.py with this.
-# Pulls from /conviction endpoint internally — confirmed working fields.
+# Adds individual analyst price targets alongside grades.
 
 @app.get("/lookup", dependencies=[Depends(verify_key)])
 async def stock_lookup(symbol: str = Query(...), x_api_key: str = Header(default=None), apikey: str = Query(default=None)):
     sym = symbol.upper().strip()
     key = x_api_key or apikey or ""
 
-    # Call our own /conviction endpoint — all fields confirmed working
     async with httpx.AsyncClient(timeout=30) as client:
-        r = await client.get(
+        # Call conviction internally for confirmed fields
+        conv_task   = client.get(
             f"http://localhost:{os.environ.get('PORT', 8080)}/conviction",
             params={"symbol": sym},
             headers={"x-api-key": key}
         )
-        if not r.is_success:
-            raise HTTPException(status_code=r.status_code, detail="Conviction fetch failed")
-        data = r.json()
+        # Call price-target endpoint for individual analyst targets
+        target_task = fmp(client, "price-target", {"symbol": sym, "limit": 5})
+
+        conv_resp, target_raw = await asyncio.gather(conv_task, target_task)
+
+    if not conv_resp.is_success:
+        raise HTTPException(status_code=conv_resp.status_code, detail="Conviction fetch failed")
+    data = conv_resp.json()
 
     q   = data.get("quote", {})
     pro = data.get("profile", {})
@@ -2478,13 +2483,28 @@ async def stock_lookup(symbol: str = Query(...), x_api_key: str = Header(default
 
     grades     = ana.get("grades", {})
     recent_raw = grades.get("recent_grades") or []
-    recent = [{
-        "company":   g.get("company", ""),
-        "grade":     g.get("grade", ""),
-        "action":    g.get("action", ""),
-        "date":      g.get("date", ""),
-        "prevGrade": g.get("prevGrade", ""),
-    } for g in recent_raw[:5]]
+
+    # Build price target lookup by analyst name from price-target endpoint
+    target_list = target_raw if isinstance(target_raw, list) else []
+    target_by_analyst = {}
+    for t in target_list:
+        name = t.get("analystCompany") or t.get("company") or ""
+        pt   = t.get("priceTarget") or t.get("price_target") or None
+        if name and pt:
+            target_by_analyst[name] = float(pt)
+
+    recent = []
+    for g in recent_raw[:5]:
+        company = g.get("company", "")
+        pt = target_by_analyst.get(company)
+        recent.append({
+            "company":     company,
+            "grade":       g.get("grade", ""),
+            "action":      g.get("action", ""),
+            "date":        g.get("date", ""),
+            "prevGrade":   g.get("prevGrade", ""),
+            "priceTarget": pt,
+        })
 
     return no_cache({
         "symbol":        data.get("symbol", sym),
