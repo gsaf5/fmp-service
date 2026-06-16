@@ -816,53 +816,74 @@ function updateCronBar() {
 async function fetchPrices(symbols) {
   if (!symbols.length) return {};
   try {
-    const url = `${API_BASE}/quote?symbols=${symbols.join(',')}`;
-    const res = await fetch(url, {
+    // Use /prices endpoint — serves from Railway cache populated by cron jobs
+    // Falls back to live fetch automatically if cache is stale
+    const url = `${API_BASE}/prices?symbols=${symbols.join(',')}`;
+    const res = await fetch(url, { headers: { 'x-api-key': API_KEY } });
+    if (!res.ok) throw new Error('HTTP ' + res.status);
+    const data = await res.json();
+
+    // Response shape: { source: "cache"|"live", age_seconds: N, data: { SYM: { price, change, ts } } }
+    const map = {};
+    const stale = !isMarketOpen();
+    if (data.data && typeof data.data === 'object') {
+      Object.entries(data.data).forEach(([sym, q]) => {
+        map[sym.toUpperCase()] = {
+          price:  parseFloat(q.price  || 0),
+          change: parseFloat(q.change || 0),
+          stale,
+          source: data.source || 'live',
+          age:    data.age_seconds || 0,
+        };
+      });
+    }
+
+    // Show cache age in last-refresh if served from cache
+    if (data.source === 'cache' && data.age_seconds > 0) {
+      const mins = Math.floor(data.age_seconds / 60);
+      const secs = data.age_seconds % 60;
+      const ageStr = mins > 0 ? `${mins}m ${secs}s ago` : `${secs}s ago`;
+      const et = getET().toLocaleTimeString('en-US', { hour:'2-digit', minute:'2-digit' });
+      document.getElementById('last-refresh').textContent = `Cache · refreshed ${ageStr} · ${et} ET`;
+    }
+
+    if (!Object.keys(map).length) {
+      // /prices not deployed yet — fall back to /quote
+      return await fetchPricesFallback(symbols);
+    }
+    return map;
+  } catch(e) {
+    console.warn('[GCC] /prices failed, trying /quote fallback:', e.message);
+    return await fetchPricesFallback(symbols);
+  }
+}
+
+async function fetchPricesFallback(symbols) {
+  // Direct /quote call — used before cron endpoint is deployed
+  try {
+    const res = await fetch(`${API_BASE}/quote?symbols=${symbols.join(',')}`, {
       headers: { 'x-api-key': API_KEY }
     });
     if (!res.ok) throw new Error('HTTP ' + res.status);
     const raw  = await res.text();
-    console.log('[GCC] /quote raw response:', raw.slice(0, 500));
-    let data;
-    try { data = JSON.parse(raw); } catch(pe) { throw new Error('JSON parse error: ' + raw.slice(0,80)); }
-    // Support every common FMP/proxy response shape
-    let arr = [];
-    if (Array.isArray(data))          arr = data;
-    else if (Array.isArray(data.data))   arr = data.data;
-    else if (Array.isArray(data.quotes)) arr = data.quotes;
-    else if (data.price !== undefined)   arr = [data];   // single-ticker object
-    else {
-      // Last resort: treat object values as quote objects
-      arr = Object.values(data).filter(v => v && typeof v === 'object');
-    }
-    console.log('[GCC] parsed arr length:', arr.length, arr[0]);
+    const data = JSON.parse(raw);
+    let arr = Array.isArray(data) ? data : (data.data || data.quotes || []);
+    if (!Array.isArray(arr)) arr = Object.values(data).filter(v => v && typeof v === 'object');
     const map = {};
+    const stale = !isMarketOpen();
     arr.forEach(q => {
-      const sym = (q.symbol || q.ticker || q.Symbol || '').toUpperCase();
+      const sym = (q.symbol || q.ticker || '').toUpperCase();
       if (!sym) return;
-      const price = parseFloat(
-        q.price ?? q.last ?? q.close ?? q.regularMarketPrice ??
-        q.previousClose ?? q.adjClose ?? 0
-      );
-      const change = parseFloat(
-        q.changesPercentage ?? q.change_pct ?? q.changePercent ??
-        q.regularMarketChangePercent ?? q.pct_change ?? 0
-      );
-      map[sym] = { price, change, stale: !isMarketOpen() };
+      map[sym] = {
+        price:  parseFloat(q.price ?? q.previousClose ?? 0),
+        change: parseFloat(q.changesPercentage ?? q.changePercent ?? 0),
+        stale,
+        source: 'direct',
+      };
     });
-    if (!Object.keys(map).length) {
-      showToast('API returned no quotes — check console', 'error');
-      console.warn('[GCC] no quotes parsed from', data);
-    }
     return map;
   } catch(e) {
-    const msg = e.message || String(e);
-    if (msg.includes('Failed to fetch') || msg.includes('NetworkError') || msg.includes('CORS')) {
-      showToast('CORS/network error — works after deploy to Railway', 'error');
-    } else {
-      showToast('Price fetch: ' + msg, 'error');
-    }
-    console.error('[GCC] fetchPrices error:', e);
+    showToast('Price fetch failed: ' + e.message, 'error');
     return {};
   }
 }
@@ -1071,3 +1092,4 @@ function initDashboard() {
 </script>
 </body>
 </html>
+
