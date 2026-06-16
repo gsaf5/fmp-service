@@ -415,9 +415,12 @@
           <div class="lookup-metric"><div class="lookup-metric-label">52wk Range</div><div class="lookup-metric-value" id="lk-range">—</div></div>
           <div class="lookup-metric"><div class="lookup-metric-label">RSI (14)</div><div class="lookup-metric-value" id="lk-rsi">—</div></div>
           <div class="lookup-metric"><div class="lookup-metric-label">Analyst Target</div><div class="lookup-metric-value" id="lk-target">—</div></div>
-          <div class="lookup-metric"><div class="lookup-metric-label">Volume</div><div class="lookup-metric-value" id="lk-vol">—</div></div>
           <div class="lookup-metric"><div class="lookup-metric-label">Mkt Cap</div><div class="lookup-metric-value" id="lk-cap">—</div></div>
-          <div class="lookup-metric"><div class="lookup-metric-label">P/E (Fwd)</div><div class="lookup-metric-value" id="lk-pe">—</div></div>
+          <div class="lookup-metric"><div class="lookup-metric-label">YTD %</div><div class="lookup-metric-value" id="lk-ytd">—</div></div>
+          <div class="lookup-metric"><div class="lookup-metric-label">Beta</div><div class="lookup-metric-value" id="lk-beta">—</div></div>
+          <div class="lookup-metric"><div class="lookup-metric-label">Vol vs Avg</div><div class="lookup-metric-value" id="lk-vol">—</div></div>
+          <div class="lookup-metric"><div class="lookup-metric-label">Div Yield</div><div class="lookup-metric-value" id="lk-div">—</div></div>
+          <div class="lookup-metric"><div class="lookup-metric-label">EPS (TTM)</div><div class="lookup-metric-value" id="lk-eps">—</div></div>
         </div>
         <div class="lookup-actions">
           <button class="run-btn conviction-run" style="padding:7px 14px;font-size:12px" onclick="lookupConviction()">⚡ Run Conviction</button>
@@ -675,7 +678,7 @@ function renderList(data) {
   const filter=(document.getElementById('search-input').value||'').toUpperCase();
   const filtered=watchlist.filter(t=>!filter||t.symbol.includes(filter)||(t.name||'').toUpperCase().includes(filter));
   document.getElementById('ticker-count').textContent=`${watchlist.length} ticker${watchlist.length!==1?'s':''}`;
-  const lookupVisible = document.getElementById('lookup-card').classList.contains('visible'); if (!filtered.length) { document.getElementById('ticker-list').innerHTML = lookupVisible ? '' : '<div style="text-align:center;padding:40px;color:var(--text3);font-size:13px">No tickers match.</div>'; return; }
+  if (!filtered.length) { const lkVisible = document.getElementById('lookup-card').classList.contains('visible'); document.getElementById('ticker-list').innerHTML = lkVisible ? '' : '<div style="text-align:center;padding:40px;color:var(--text3);font-size:13px">No tickers found in watchlist.</div>'; return; }
   const grouped={};
   filtered.forEach(t=>{ const k=String(t.tier??'0'); if(!grouped[k])grouped[k]=[]; grouped[k].push(t); });
   let html='',first=true;
@@ -924,7 +927,7 @@ async function runLookup(symbol) {
   document.getElementById('lk-name').textContent = '';
   document.getElementById('lk-price').textContent = '···';
   document.getElementById('lk-change').textContent = '';
-  ['lk-range','lk-rsi','lk-target','lk-vol','lk-cap','lk-pe'].forEach(id => {
+  ['lk-range','lk-rsi','lk-target','lk-cap','lk-ytd','lk-beta','lk-vol','lk-div','lk-eps'].forEach(id => {
     document.getElementById(id).textContent = '···';
   });
 
