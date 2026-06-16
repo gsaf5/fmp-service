@@ -419,10 +419,13 @@
           <div class="lookup-metric"><div class="lookup-metric-label">YTD %</div><div class="lookup-metric-value" id="lk-ytd">—</div></div>
           <div class="lookup-metric"><div class="lookup-metric-label">Beta</div><div class="lookup-metric-value" id="lk-beta">—</div></div>
           <div class="lookup-metric"><div class="lookup-metric-label">Volume</div><div class="lookup-metric-value" id="lk-vol">—</div></div>
-          <div class="lookup-metric"><div class="lookup-metric-label">Div Yield</div><div class="lookup-metric-value" id="lk-div">—</div></div>
           <div class="lookup-metric"><div class="lookup-metric-label">EPS (TTM)</div><div class="lookup-metric-value" id="lk-eps">—</div></div>
         </div>
-        <div class="lookup-actions">
+        <div id="lk-analyst-section" style="display:none;margin-top:12px;border-top:1px solid var(--border);padding-top:10px">
+          <div style="font-size:10px;color:var(--text3);text-transform:uppercase;letter-spacing:0.08em;font-family:var(--font);margin-bottom:8px">Recent Analyst Actions</div>
+          <div id="lk-grades"></div>
+        </div>
+        <div class="lookup-actions" style="margin-top:12px">
           <button class="run-btn conviction-run" style="padding:7px 14px;font-size:12px" onclick="lookupConviction()">⚡ Run Conviction</button>
           <button class="toolbar-btn primary" style="font-size:12px" onclick="lookupAdd()">+ Add to Watchlist</button>
         </div>
@@ -929,7 +932,7 @@ async function runLookup(symbol) {
   document.getElementById('lk-name').textContent   = '';
   document.getElementById('lk-price').textContent  = '···';
   document.getElementById('lk-change').textContent = '';
-  ['lk-range','lk-rsi','lk-target','lk-cap','lk-ytd','lk-beta','lk-vol','lk-div','lk-eps'].forEach(id => {
+  ['lk-range','lk-rsi','lk-target','lk-cap','lk-ytd','lk-beta','lk-vol','lk-eps'].forEach(id => {
     document.getElementById(id).textContent = '···';
   });
 
@@ -998,13 +1001,34 @@ async function runLookup(symbol) {
       ? (vol > 1e6 ? `${(vol/1e6).toFixed(1)}M` : `${(vol/1e3).toFixed(0)}K`)
       : '—';
 
-    // Dividend Yield
-    const divY = q.divYieldPct != null ? parseFloat(q.divYieldPct) : null;
-    document.getElementById('lk-div').textContent = divY != null ? `${divY.toFixed(2)}%` : '—';
-
     // EPS
     const eps = q.eps != null ? parseFloat(q.eps) : null;
     document.getElementById('lk-eps').textContent = eps != null ? `$${eps.toFixed(2)}` : '—';
+
+    // Analyst grades section
+    const grades    = q.recentGrades || [];
+    const anaSection = document.getElementById('lk-analyst-section');
+    const gradesEl   = document.getElementById('lk-grades');
+    if (grades.length) {
+      anaSection.style.display = 'block';
+      gradesEl.innerHTML = grades.map(g => {
+        const action = (g.action || '').toLowerCase();
+        const isUp   = action === 'upgrade';
+        const isDn   = action === 'downgrade';
+        const color  = isUp ? 'var(--green)' : isDn ? 'var(--red)' : 'var(--text2)';
+        const icon   = isUp ? '▲' : isDn ? '▼' : '·';
+        const date   = g.date ? g.date.slice(0,10) : '';
+        const prev   = g.prevGrade ? `<span style="color:var(--text3)">${g.prevGrade} → </span>` : '';
+        return `<div style="display:flex;align-items:center;gap:8px;padding:5px 0;border-bottom:1px solid var(--border);font-size:11px;font-family:var(--font)">
+          <span style="color:${color};font-size:12px;width:14px;flex-shrink:0">${icon}</span>
+          <span style="color:var(--text2);flex:1;overflow:hidden;text-overflow:ellipsis;white-space:nowrap">${g.company}</span>
+          <span>${prev}<span style="color:${color};font-weight:600">${g.grade}</span></span>
+          <span style="color:var(--text3);font-size:10px;flex-shrink:0">${date}</span>
+        </div>`;
+      }).join('');
+    } else {
+      anaSection.style.display = 'none';
+    }
 
   } catch(e) {
     document.getElementById('lk-price').textContent = 'Error';
