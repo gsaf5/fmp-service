@@ -25,291 +25,122 @@
     --amber-dim: rgba(251,191,36,0.13);
     --blue: #60a5fa;
     --blue-dim: rgba(96,165,250,0.13);
+    --yellow: #facc15;
+    --yellow-dim: rgba(250,204,21,0.13);
     --purple: #a78bfa;
     --purple-dim: rgba(167,139,250,0.13);
-    --accent: #60a5fa;
     --font: 'SF Mono', 'Fira Code', 'Courier New', monospace;
     --sans: -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif;
   }
 
-  body {
-    background: var(--bg);
-    color: var(--text);
-    font-family: var(--sans);
-    min-height: 100vh;
-    overflow-x: hidden;
-  }
+  body { background: var(--bg); color: var(--text); font-family: var(--sans); min-height: 100vh; overflow-x: hidden; }
 
-  /* ── PIN SCREEN ── */
+  /* ══ PIN SCREEN ══════════════════════════════════════════════════════ */
   #pin-screen {
-    position: fixed; inset: 0;
-    background: var(--bg);
-    display: flex;
-    flex-direction: column;
-    align-items: center;
-    justify-content: center;
-    z-index: 1000;
-    gap: 32px;
+    position: fixed; inset: 0; background: var(--bg);
+    display: flex; flex-direction: column; align-items: center; justify-content: center;
+    z-index: 1000; gap: 32px;
   }
-
   #pin-screen.hidden { display: none; }
 
   .pin-logo-mark {
-    width: 60px; height: 60px;
-    border: 1.5px solid var(--border2);
-    border-radius: 16px;
+    width: 60px; height: 60px; border: 1.5px solid var(--border2); border-radius: 16px;
     display: flex; align-items: center; justify-content: center;
-    font-family: var(--font);
-    font-size: 18px;
-    font-weight: 700;
-    color: var(--blue);
-    letter-spacing: -1px;
-    background: var(--surface);
-    margin: 0 auto 8px;
+    font-family: var(--font); font-size: 18px; font-weight: 700; color: var(--blue);
+    background: var(--surface); margin: 0 auto 8px;
   }
-
-  .pin-title {
-    font-size: 13px;
-    color: var(--text2);
-    letter-spacing: 0.12em;
-    text-transform: uppercase;
-    font-weight: 500;
-    text-align: center;
-  }
-
-  .pin-dots {
-    display: flex;
-    gap: 14px;
-    align-items: center;
-    height: 20px;
-    justify-content: center;
-  }
-
-  .pin-dot {
-    width: 13px; height: 13px;
-    border-radius: 50%;
-    border: 1.5px solid var(--border2);
-    background: transparent;
-    transition: background 0.12s, border-color 0.12s;
-  }
-
+  .pin-title { font-size: 13px; color: var(--text2); letter-spacing: 0.12em; text-transform: uppercase; font-weight: 500; text-align: center; }
+  .pin-dots { display: flex; gap: 14px; align-items: center; height: 20px; justify-content: center; }
+  .pin-dot { width: 13px; height: 13px; border-radius: 50%; border: 1.5px solid var(--border2); background: transparent; transition: background 0.12s, border-color 0.12s; }
   .pin-dot.filled { background: var(--blue); border-color: var(--blue); }
   .pin-dot.error  { background: var(--red);  border-color: var(--red); }
-
-  .pin-message {
-    font-size: 12px;
-    color: var(--text3);
-    height: 16px;
-    text-align: center;
-    letter-spacing: 0.04em;
-  }
-
+  .pin-message { font-size: 12px; color: var(--text3); height: 16px; text-align: center; letter-spacing: 0.04em; }
   .pin-message.error { color: var(--red); }
-
-  .pin-keypad {
-    display: grid;
-    grid-template-columns: repeat(3, 76px);
-    gap: 10px;
-  }
-
+  .pin-keypad { display: grid; grid-template-columns: repeat(3, 80px); gap: 10px; }
   .pin-key {
-    height: 76px;
-    background: var(--surface);
-    border: 1px solid var(--border2);
-    border-radius: 14px;
-    color: var(--text);
-    font-size: 24px;
-    font-weight: 400;
-    cursor: pointer;
+    height: 80px; background: var(--surface); border: 1px solid var(--border2); border-radius: 14px;
+    color: var(--text); font-size: 24px; font-weight: 400; cursor: pointer;
     display: flex; align-items: center; justify-content: center;
-    transition: background 0.1s, transform 0.08s;
-    user-select: none;
-    -webkit-tap-highlight-color: transparent;
-    font-family: var(--sans);
+    transition: background 0.1s, transform 0.08s; user-select: none;
+    -webkit-tap-highlight-color: transparent; font-family: var(--sans);
   }
-
   .pin-key:hover  { background: var(--surface2); }
   .pin-key:active { background: var(--surface3); transform: scale(0.95); }
   .pin-key.wide   { grid-column: span 2; }
   .pin-key.del    { font-size: 18px; color: var(--text2); }
 
-  /* ── DASHBOARD ── */
+  /* ══ DASHBOARD SHELL ════════════════════════════════════════════════ */
   #dashboard { display: none; flex-direction: column; min-height: 100vh; }
   #dashboard.visible { display: flex; }
 
-  /* Header */
+  /* ── Header ── */
   .header {
-    display: flex;
-    align-items: center;
-    justify-content: space-between;
-    padding: 14px 20px;
-    border-bottom: 1px solid var(--border);
-    position: sticky; top: 0;
-    background: rgba(28,31,38,0.97);
-    backdrop-filter: blur(8px);
-    z-index: 100;
+    display: flex; align-items: center; justify-content: space-between;
+    padding: 12px 16px; border-bottom: 1px solid var(--border);
+    position: sticky; top: 0; z-index: 100;
+    background: rgba(28,31,38,0.97); backdrop-filter: blur(8px);
   }
-
   .header-left { display: flex; align-items: center; gap: 10px; }
-
   .header-logo {
-    font-family: var(--font);
-    font-size: 13px;
-    color: var(--blue);
-    font-weight: 700;
-    letter-spacing: -0.5px;
-    border: 1px solid rgba(96,165,250,0.35);
-    padding: 4px 9px;
-    border-radius: 7px;
-    background: var(--blue-dim);
+    font-family: var(--font); font-size: 13px; color: var(--blue); font-weight: 700;
+    border: 1px solid rgba(96,165,250,0.35); padding: 4px 9px; border-radius: 7px;
+    background: var(--blue-dim); letter-spacing: -0.5px; flex-shrink: 0;
   }
 
-  .header-title { font-size: 14px; color: var(--text2); font-weight: 400; }
-
-  .header-right { display: flex; align-items: center; gap: 14px; }
-
-  .market-status {
-    display: flex; align-items: center; gap: 6px;
-    font-size: 11px; color: var(--text2);
-    font-family: var(--font);
+  /* Top nav tabs */
+  .nav-tabs { display: flex; gap: 4px; }
+  .nav-tab {
+    padding: 6px 12px; border-radius: 7px; font-size: 12px; font-weight: 500;
+    cursor: pointer; border: 1px solid transparent; color: var(--text2);
+    background: none; transition: all 0.15s; white-space: nowrap;
+    font-family: var(--sans);
   }
+  .nav-tab:hover { color: var(--text); background: var(--surface2); }
+  .nav-tab.active.watchlist { background: var(--blue-dim); color: var(--blue); border-color: rgba(96,165,250,0.35); }
+  .nav-tab.active.discovery { background: var(--yellow-dim); color: var(--yellow); border-color: rgba(250,204,21,0.35); }
+  .nav-tab.active.conviction { background: var(--surface2); color: var(--text); border-color: var(--border2); }
 
-  .market-dot {
-    width: 7px; height: 7px;
-    border-radius: 50%;
-    background: var(--green);
-    animation: pulse 2s infinite;
-  }
-
+  .header-right { display: flex; align-items: center; gap: 10px; flex-shrink: 0; }
+  .market-status { display: flex; align-items: center; gap: 6px; font-size: 11px; color: var(--text2); font-family: var(--font); }
+  .market-dot { width: 7px; height: 7px; border-radius: 50%; background: var(--green); animation: pulse 2s infinite; }
   .market-dot.closed { background: var(--text3); animation: none; }
-
   @keyframes pulse { 0%,100%{opacity:1}50%{opacity:.35} }
-
-  .lock-btn {
-    background: var(--surface2);
-    border: 1px solid var(--border);
-    color: var(--text2);
-    cursor: pointer;
-    font-size: 15px;
-    padding: 5px 9px;
-    border-radius: 7px;
-    transition: all 0.15s;
-  }
-
+  .lock-btn { background: var(--surface2); border: 1px solid var(--border); color: var(--text2); cursor: pointer; font-size: 14px; padding: 5px 8px; border-radius: 7px; transition: all 0.15s; }
   .lock-btn:hover { color: var(--text); border-color: var(--border2); }
 
-  /* Cron bar */
-  .cron-bar {
-    display: flex;
-    gap: 8px;
-    padding: 10px 20px;
-    border-bottom: 1px solid var(--border);
-    overflow-x: auto;
-    scrollbar-width: none;
-    background: var(--surface);
-  }
-
+  /* ── Cron bar ── */
+  .cron-bar { display: flex; gap: 8px; padding: 8px 16px; border-bottom: 1px solid var(--border); overflow-x: auto; scrollbar-width: none; background: var(--surface); }
   .cron-bar::-webkit-scrollbar { display: none; }
-
-  .cron-pill {
-    display: flex; align-items: center; gap: 6px;
-    padding: 5px 12px;
-    border-radius: 20px;
-    border: 1px solid var(--border);
-    font-size: 11px;
-    white-space: nowrap;
-    color: var(--text2);
-    background: var(--surface2);
-    font-family: var(--font);
-    flex-shrink: 0;
-  }
-
+  .cron-pill { display: flex; align-items: center; gap: 5px; padding: 4px 10px; border-radius: 20px; border: 1px solid var(--border); font-size: 11px; white-space: nowrap; color: var(--text2); background: var(--surface2); font-family: var(--font); flex-shrink: 0; }
   .cron-pill.active { border-color: rgba(96,165,250,0.45); background: var(--blue-dim); color: var(--blue); }
   .cron-pill.done   { border-color: rgba(52,211,153,0.3);  background: var(--green-dim); color: var(--green); }
+  .cron-dot { width: 5px; height: 5px; border-radius: 50%; background: currentColor; opacity: 0.8; }
 
-  .cron-dot { width: 6px; height: 6px; border-radius: 50%; background: currentColor; opacity: 0.8; }
+  /* ══ SECTIONS ════════════════════════════════════════════════════════ */
+  .section { display: none; flex: 1; flex-direction: column; }
+  .section.active { display: flex; }
 
-  /* Toolbar */
-  .toolbar {
-    display: flex; align-items: center; justify-content: space-between;
-    padding: 12px 20px; gap: 10px;
-    background: var(--bg);
-    border-bottom: 1px solid var(--border);
-  }
-
+  /* ── Watchlist toolbar ── */
+  .toolbar { display: flex; align-items: center; justify-content: space-between; padding: 10px 16px; gap: 8px; border-bottom: 1px solid var(--border); background: var(--bg); }
   .toolbar-left { display: flex; gap: 8px; align-items: center; flex: 1; }
-
-  .search-input {
-    background: var(--surface);
-    border: 1px solid var(--border2);
-    border-radius: 8px;
-    padding: 8px 12px;
-    color: var(--text);
-    font-size: 13px;
-    font-family: var(--sans);
-    width: 200px;
-    outline: none;
-    transition: border-color 0.15s;
-  }
-
+  .search-input { background: var(--surface); border: 1px solid var(--border2); border-radius: 8px; padding: 7px 12px; color: var(--text); font-size: 13px; font-family: var(--sans); width: 180px; outline: none; transition: border-color 0.15s; }
   .search-input:focus { border-color: var(--blue); }
   .search-input::placeholder { color: var(--text3); }
-
-  .toolbar-btn {
-    background: var(--surface);
-    border: 1px solid var(--border2);
-    border-radius: 8px;
-    padding: 8px 13px;
-    color: var(--text2);
-    font-size: 12px;
-    font-family: var(--sans);
-    cursor: pointer;
-    white-space: nowrap;
-    transition: all 0.1s;
-    display: flex; align-items: center; gap: 5px;
-  }
-
-  .toolbar-btn:hover { background: var(--surface2); color: var(--text); border-color: var(--border2); }
+  .toolbar-btn { background: var(--surface); border: 1px solid var(--border2); border-radius: 8px; padding: 7px 12px; color: var(--text2); font-size: 12px; font-family: var(--sans); cursor: pointer; white-space: nowrap; transition: all 0.1s; }
+  .toolbar-btn:hover { background: var(--surface2); color: var(--text); }
   .toolbar-btn.primary { border-color: rgba(96,165,250,0.45); color: var(--blue); background: var(--blue-dim); }
   .toolbar-btn.primary:hover { background: rgba(96,165,250,0.22); }
-
   .last-refresh { font-size: 11px; color: var(--text3); font-family: var(--font); white-space: nowrap; }
 
-  /* Watchlist */
-  .watchlist { padding: 0 20px 32px; flex: 1; }
-
-  .section-header {
-    display: flex; align-items: center; justify-content: space-between;
-    padding: 16px 0 10px;
-  }
-
+  /* ── Watchlist cards ── */
+  .watchlist { padding: 0 16px 32px; flex: 1; overflow-y: auto; }
+  .section-header { display: flex; align-items: center; justify-content: space-between; padding: 14px 0 8px; }
   .section-label { font-size: 11px; color: var(--text3); text-transform: uppercase; letter-spacing: 0.1em; font-weight: 500; }
   .ticker-count  { font-size: 11px; color: var(--text3); font-family: var(--font); }
-
-  .tier-label {
-    font-size: 10px; color: var(--text3);
-    text-transform: uppercase; letter-spacing: 0.1em;
-    padding: 14px 0 6px;
-    border-top: 1px solid var(--border);
-    font-family: var(--font);
-    margin-top: 4px;
-  }
-
+  .tier-label { font-size: 10px; color: var(--text3); text-transform: uppercase; letter-spacing: 0.1em; padding: 14px 0 6px; border-top: 1px solid var(--border); font-family: var(--font); }
   .tier-first { border-top: none; padding-top: 4px; }
 
-  /* Ticker card */
-  .ticker-card {
-    background: var(--surface);
-    border: 1px solid var(--border);
-    border-radius: 12px;
-    padding: 14px 16px;
-    margin-bottom: 7px;
-    display: flex;
-    align-items: center;
-    gap: 14px;
-    transition: border-color 0.15s, background 0.15s;
-  }
-
+  .ticker-card { background: var(--surface); border: 1px solid var(--border); border-radius: 12px; padding: 13px 15px; margin-bottom: 7px; display: flex; align-items: center; gap: 12px; transition: border-color 0.15s, background 0.15s; }
   .ticker-card:hover { background: var(--surface2); border-color: var(--border2); }
   .ticker-card.in-zone    { border-left: 3px solid var(--green); }
   .ticker-card.above-zone { border-left: 3px solid var(--amber); }
@@ -317,162 +148,112 @@
   .ticker-card.no-zone    { border-left: 3px solid var(--purple); }
 
   .ticker-meta { min-width: 80px; }
-
-  .ticker-symbol {
-    font-family: var(--font);
-    font-size: 14px; font-weight: 700;
-    color: var(--text);
-    letter-spacing: 0.02em;
-  }
-
+  .ticker-symbol { font-family: var(--font); font-size: 14px; font-weight: 700; color: var(--text); letter-spacing: 0.02em; }
   .ticker-name { font-size: 11px; color: var(--text3); margin-top: 2px; }
-
-  .ticker-price-block { text-align: right; min-width: 80px; }
-
-  .ticker-price {
-    font-family: var(--font);
-    font-size: 16px; font-weight: 600;
-    color: var(--text);
-    letter-spacing: -0.5px;
-  }
-
-  .ticker-change { font-family: var(--font); font-size: 11px; margin-top: 2px; }
-  .ticker-change.pos  { color: var(--green); }
-  .ticker-change.neg  { color: var(--red); }
+  .ticker-change { font-family: var(--font); font-size: 11px; }
+  .ticker-change.pos { color: var(--green); }
+  .ticker-change.neg { color: var(--red); }
   .ticker-change.flat { color: var(--text3); }
 
-  .zone-block { min-width: 100px; }
+  .ticker-zone-range { flex: 1; font-size: 13px; color: var(--text3); font-family: var(--font); min-width: 0; }
+  .zone-range-line { margin-bottom: 2px; }
+  .zone-range-line span { color: var(--text); }
 
-  .zone-badge {
-    padding: 4px 10px;
-    border-radius: 20px;
-    font-size: 10px; font-weight: 600;
-    letter-spacing: 0.05em;
-    text-transform: uppercase;
-    white-space: nowrap;
-    font-family: var(--font);
-    text-align: center;
-    display: inline-block;
-    width: 100%;
-  }
-
+  .zone-block { min-width: 96px; }
+  .zone-badge { padding: 4px 10px; border-radius: 20px; font-size: 10px; font-weight: 600; letter-spacing: 0.05em; text-transform: uppercase; white-space: nowrap; font-family: var(--font); text-align: center; display: inline-block; width: 100%; }
   .zone-badge.in-zone    { background: var(--green-dim);  color: var(--green);  border: 1px solid rgba(52,211,153,0.3); }
   .zone-badge.above-zone { background: var(--amber-dim);  color: var(--amber);  border: 1px solid rgba(251,191,36,0.3); }
   .zone-badge.below-zone { background: rgba(255,255,255,0.05); color: var(--text2); border: 1px solid var(--border); }
   .zone-badge.no-zone    { background: var(--purple-dim); color: var(--purple); border: 1px solid rgba(167,139,250,0.3); }
   .zone-badge.loading    { background: var(--surface3); color: var(--text3); border: 1px solid var(--border); animation: shimmer 1.4s infinite; }
-  .zone-badge.stale      { background: var(--surface3); color: var(--text2); border: 1px solid var(--border2); }
-
   @keyframes shimmer { 0%,100%{opacity:1}50%{opacity:.4} }
-
   .zone-from { font-size: 10px; color: var(--text3); font-family: var(--font); margin-top: 3px; text-align: center; }
 
-  .ticker-zone-range {
-    flex: 1;
-    font-size: 13px;
-    color: var(--text3);
-    font-family: var(--font);
-    min-width: 0;
-  }
-
-  .zone-range-line { margin-bottom: 2px; }
-  .zone-range-line span { color: var(--text); }
-
-  .ticker-actions { display: flex; gap: 6px; align-items: center; flex-shrink: 0; }
-
-  .action-btn {
-    background: var(--surface2);
-    border: 1px solid var(--border);
-    border-radius: 7px;
-    padding: 6px 10px;
-    font-size: 11px; color: var(--text2);
-    cursor: pointer; white-space: nowrap;
-    transition: all 0.1s;
-    font-family: var(--sans);
-  }
-
-  .action-btn:hover { border-color: var(--border2); color: var(--text); background: var(--surface3); }
-  .action-btn.conviction { color: var(--blue); border-color: rgba(96,165,250,0.35); background: var(--blue-dim); }
-  .action-btn.conviction:hover { background: rgba(96,165,250,0.22); }
+  .ticker-actions { display: flex; gap: 5px; align-items: center; flex-shrink: 0; }
+  .action-btn { background: var(--surface2); border: 1px solid var(--border); border-radius: 7px; padding: 5px 9px; font-size: 11px; color: var(--text2); cursor: pointer; white-space: nowrap; transition: all 0.1s; font-family: var(--sans); }
+  .action-btn:hover { border-color: var(--border2); color: var(--text); }
+  .action-btn.conviction { color: var(--text); border-color: var(--border2); background: var(--surface2); }
+  .action-btn.conviction:hover { background: var(--surface3); }
   .action-btn.remove:hover { color: var(--red); border-color: rgba(248,113,113,0.35); background: var(--red-dim); }
 
-  /* Modal */
-  .modal-overlay {
-    position: fixed; inset: 0;
-    background: rgba(0,0,0,0.55);
-    display: none; align-items: center; justify-content: center;
-    z-index: 500;
-  }
+  /* ══ DISCOVERY SECTION ═══════════════════════════════════════════════ */
+  .ai-section { padding: 16px; flex: 1; display: flex; flex-direction: column; gap: 12px; overflow-y: auto; }
 
+  .ai-header { display: flex; align-items: flex-start; justify-content: space-between; gap: 12px; flex-wrap: wrap; }
+  .ai-title { font-size: 13px; font-weight: 600; color: var(--text); }
+  .ai-subtitle { font-size: 12px; color: var(--text3); margin-top: 3px; line-height: 1.5; }
+
+  .run-btn {
+    padding: 10px 20px; border-radius: 9px; font-size: 13px; font-weight: 600;
+    cursor: pointer; border: none; white-space: nowrap; transition: all 0.15s;
+    font-family: var(--sans); flex-shrink: 0;
+  }
+  .run-btn.discovery { background: var(--yellow); color: #0f1117; }
+  .run-btn.discovery:hover { background: #fde047; }
+  .run-btn.discovery:disabled { opacity: 0.5; cursor: not-allowed; }
+  .run-btn.conviction-run { background: var(--surface2); color: var(--text); border: 1px solid var(--border2); }
+  .run-btn.conviction-run:hover { background: var(--surface3); }
+  .run-btn.conviction-run:disabled { opacity: 0.5; cursor: not-allowed; }
+
+  /* Ticker input for conviction */
+  .ticker-input-row { display: flex; gap: 8px; align-items: center; flex-wrap: wrap; }
+  .ticker-input {
+    background: var(--surface); border: 1px solid var(--border2); border-radius: 8px;
+    padding: 10px 14px; color: var(--text); font-size: 15px; font-family: var(--font);
+    font-weight: 700; outline: none; width: 130px; text-transform: uppercase;
+    letter-spacing: 0.05em; transition: border-color 0.15s;
+  }
+  .ticker-input:focus { border-color: var(--blue); }
+  .ticker-input::placeholder { color: var(--text3); font-weight: 400; font-size: 13px; letter-spacing: 0; }
+
+  /* Quick-pick chips from watchlist */
+  .quick-picks { display: flex; gap: 6px; flex-wrap: wrap; margin-top: 4px; }
+  .quick-chip {
+    padding: 4px 10px; border-radius: 20px; font-size: 11px; font-family: var(--font);
+    font-weight: 600; background: var(--surface2); border: 1px solid var(--border);
+    color: var(--text2); cursor: pointer; transition: all 0.1s;
+  }
+  .quick-chip:hover { border-color: var(--border2); color: var(--text); background: var(--surface3); }
+
+  /* AI output area */
+  .ai-output {
+    background: var(--surface); border: 1px solid var(--border); border-radius: 12px;
+    padding: 16px; min-height: 200px; flex: 1;
+    font-family: var(--font); font-size: 12px; line-height: 1.7; color: var(--text2);
+    white-space: pre-wrap; word-break: break-word; overflow-y: auto;
+    position: relative;
+  }
+  .ai-output.empty { display: flex; align-items: center; justify-content: center; color: var(--text3); font-size: 13px; font-family: var(--sans); }
+  .ai-output .streaming-cursor { display: inline-block; width: 8px; height: 14px; background: var(--blue); animation: blink 1s infinite; vertical-align: middle; margin-left: 2px; border-radius: 1px; }
+  @keyframes blink { 0%,100%{opacity:1}50%{opacity:0} }
+
+  .ai-status { font-size: 11px; color: var(--text3); font-family: var(--font); display: flex; align-items: center; gap: 6px; }
+  .ai-status .spinner { width: 12px; height: 12px; border: 2px solid var(--border2); border-top-color: var(--blue); border-radius: 50%; animation: spin 0.7s linear infinite; }
+  @keyframes spin { to { transform: rotate(360deg); } }
+
+  /* Divider */
+  .ai-divider { border: none; border-top: 1px solid var(--border); margin: 4px 0; }
+
+  /* ══ ADD TICKER MODAL ════════════════════════════════════════════════ */
+  .modal-overlay { position: fixed; inset: 0; background: rgba(0,0,0,0.55); display: none; align-items: center; justify-content: center; z-index: 500; }
   .modal-overlay.visible { display: flex; }
-
-  .modal {
-    background: var(--surface2);
-    border: 1px solid var(--border2);
-    border-radius: 16px;
-    padding: 24px;
-    width: 380px;
-    max-width: calc(100vw - 32px);
-  }
-
-  .modal-title { font-size: 15px; font-weight: 600; color: var(--text); margin-bottom: 18px; }
-
-  .modal-field { margin-bottom: 12px; }
-
-  .modal-label {
-    font-size: 10px; color: var(--text3);
-    text-transform: uppercase; letter-spacing: 0.08em;
-    margin-bottom: 5px; display: block;
-    font-family: var(--font);
-  }
-
-  .modal-input {
-    width: 100%;
-    background: var(--surface);
-    border: 1px solid var(--border2);
-    border-radius: 8px;
-    padding: 9px 12px;
-    color: var(--text); font-size: 13px;
-    font-family: var(--font);
-    outline: none; transition: border-color 0.15s;
-  }
-
+  .modal { background: var(--surface2); border: 1px solid var(--border2); border-radius: 16px; padding: 22px; width: 370px; max-width: calc(100vw - 28px); }
+  .modal-title { font-size: 15px; font-weight: 600; color: var(--text); margin-bottom: 16px; }
+  .modal-field { margin-bottom: 11px; }
+  .modal-label { font-size: 10px; color: var(--text3); text-transform: uppercase; letter-spacing: 0.08em; margin-bottom: 4px; display: block; font-family: var(--font); }
+  .modal-input { width: 100%; background: var(--surface); border: 1px solid var(--border2); border-radius: 8px; padding: 8px 12px; color: var(--text); font-size: 13px; font-family: var(--font); outline: none; transition: border-color 0.15s; }
   .modal-input:focus { border-color: var(--blue); }
   .modal-input::placeholder { color: var(--text3); }
-
   .modal-row { display: grid; grid-template-columns: 1fr 1fr; gap: 10px; }
-
-  .modal-actions { display: flex; gap: 8px; margin-top: 20px; }
-
-  .modal-btn {
-    flex: 1; padding: 10px;
-    border-radius: 8px; font-size: 13px;
-    cursor: pointer; border: 1px solid var(--border2);
-    font-family: var(--sans); transition: all 0.1s;
-  }
-
+  .modal-actions { display: flex; gap: 8px; margin-top: 18px; }
+  .modal-btn { flex: 1; padding: 9px; border-radius: 8px; font-size: 13px; cursor: pointer; border: 1px solid var(--border2); font-family: var(--sans); transition: all 0.1s; }
   .modal-btn.cancel { background: var(--surface); color: var(--text2); }
   .modal-btn.cancel:hover { color: var(--text); }
   .modal-btn.save { background: var(--blue); color: #0f1117; border-color: var(--blue); font-weight: 600; }
   .modal-btn.save:hover { background: #93c5fd; }
 
-  /* Empty state */
-  .empty-state { text-align: center; padding: 56px 20px; color: var(--text3); font-size: 13px; }
-
   /* Toast */
-  .toast {
-    position: fixed; bottom: 24px; left: 50%;
-    transform: translateX(-50%);
-    background: var(--surface3);
-    border: 1px solid var(--border2);
-    border-radius: 8px;
-    padding: 10px 18px;
-    font-size: 12px; color: var(--text2);
-    z-index: 999; display: none; white-space: nowrap;
-    font-family: var(--font);
-    box-shadow: 0 4px 24px rgba(0,0,0,0.4);
-  }
-
+  .toast { position: fixed; bottom: 24px; left: 50%; transform: translateX(-50%); background: var(--surface3); border: 1px solid var(--border2); border-radius: 8px; padding: 9px 16px; font-size: 12px; color: var(--text2); z-index: 999; display: none; white-space: nowrap; font-family: var(--font); box-shadow: 0 4px 24px rgba(0,0,0,0.4); }
   .toast.visible { display: block; }
   .toast.error   { border-color: rgba(248,113,113,0.45); color: var(--red); }
   .toast.success { border-color: rgba(52,211,153,0.4);   color: var(--green); }
@@ -482,81 +263,38 @@
   ::-webkit-scrollbar-track { background: transparent; }
   ::-webkit-scrollbar-thumb { background: var(--border2); border-radius: 2px; }
 
+  /* ══ MOBILE ══════════════════════════════════════════════════════════ */
   @media (max-width: 768px) {
-    /* Header */
-    .header-title { display: none; }
-
-    /* Cron bar — smaller pills */
-    .cron-pill { font-size: 10px; padding: 4px 8px; gap: 4px; }
-
-    /* Toolbar */
-    .toolbar { flex-wrap: wrap; gap: 8px; padding: 10px 12px; }
-    .toolbar-left { flex-wrap: wrap; gap: 6px; }
-    .search-input { width: 100%; }
-    .toolbar-btn { font-size: 11px; padding: 7px 10px; flex: 1; justify-content: center; }
-    .last-refresh { width: 100%; text-align: right; font-size: 10px; }
-
-    /* Watchlist padding */
-    .watchlist { padding: 0 12px 24px; }
-
-    /* Ticker card — stack vertically */
-    .ticker-card {
-      flex-wrap: wrap;
-      gap: 8px;
-      padding: 12px;
-      align-items: flex-start;
-    }
-
-    /* Row 1: symbol+price fills width, zone badge right-aligned */
-    .ticker-meta { flex: 1; min-width: 0; }
-    .ticker-symbol { font-size: 15px; }
-
-    /* Hide zone range on mobile — too wide */
+    .nav-tab { padding: 5px 9px; font-size: 11px; }
+    .header { padding: 10px 12px; gap: 6px; }
     .ticker-zone-range { display: none; }
-
-    /* Zone badge + distance */
-    .zone-block { min-width: 0; flex: 0 0 auto; }
-    .zone-badge { font-size: 9px; padding: 3px 8px; min-width: 70px; }
-    .zone-from { font-size: 9px; }
-
-    /* Actions row — full width at bottom */
-    .ticker-actions {
-      width: 100%;
-      justify-content: flex-end;
-      gap: 6px;
-      border-top: 1px solid var(--border);
-      padding-top: 8px;
-      margin-top: 2px;
-    }
-
-    .action-btn { font-size: 11px; padding: 6px 12px; }
-    .action-btn.conviction { flex: 1; text-align: center; justify-content: center; }
-
-    /* Modal full width */
-    .modal { width: calc(100vw - 24px); padding: 18px; }
-    .modal-row { grid-template-columns: 1fr 1fr; }
-
-    /* PIN keypad bigger on mobile */
-    .pin-key { height: 80px; font-size: 26px; }
-    .pin-keypad { grid-template-columns: repeat(3, 88px); gap: 10px; }
+    .ticker-actions { flex-direction: column; gap: 4px; }
+    .action-btn { font-size: 10px; padding: 4px 8px; }
+    .zone-block { min-width: 80px; }
+    .toolbar { flex-wrap: wrap; padding: 8px 12px; }
+    .search-input { width: 100%; }
+    .toolbar-btn { flex: 1; justify-content: center; font-size: 11px; }
+    .last-refresh { width: 100%; text-align: right; font-size: 10px; }
+    .watchlist { padding: 0 12px 24px; }
+    .ai-section { padding: 12px; }
+    .modal { width: calc(100vw - 24px); }
+    .pin-key { height: 76px; }
+    .pin-keypad { grid-template-columns: repeat(3, 82px); }
   }
 </style>
 </head>
 <body>
 
-<!-- PIN SCREEN -->
+<!-- ══ PIN SCREEN ══ -->
 <div id="pin-screen">
   <div>
     <div class="pin-logo-mark">GCC</div>
     <div class="pin-title">Command Center</div>
   </div>
   <div class="pin-dots" id="pin-dots">
-    <div class="pin-dot" id="dot-0"></div>
-    <div class="pin-dot" id="dot-1"></div>
-    <div class="pin-dot" id="dot-2"></div>
-    <div class="pin-dot" id="dot-3"></div>
-    <div class="pin-dot" id="dot-4"></div>
-    <div class="pin-dot" id="dot-5"></div>
+    <div class="pin-dot" id="dot-0"></div><div class="pin-dot" id="dot-1"></div>
+    <div class="pin-dot" id="dot-2"></div><div class="pin-dot" id="dot-3"></div>
+    <div class="pin-dot" id="dot-4"></div><div class="pin-dot" id="dot-5"></div>
   </div>
   <div class="pin-message" id="pin-message">Enter 6-digit PIN</div>
   <div class="pin-keypad">
@@ -574,13 +312,18 @@
   </div>
 </div>
 
-<!-- DASHBOARD -->
+<!-- ══ DASHBOARD ══ -->
 <div id="dashboard">
 
+  <!-- Header with top nav -->
   <div class="header">
     <div class="header-left">
       <div class="header-logo">GCC</div>
-      <div class="header-title">Command Center</div>
+      <nav class="nav-tabs">
+        <button class="nav-tab watchlist active" onclick="switchTab('watchlist')">📊 Watchlist</button>
+        <button class="nav-tab discovery" onclick="switchTab('discovery')">🔍 Discovery</button>
+        <button class="nav-tab conviction" onclick="switchTab('conviction')">⚡ Conviction</button>
+      </nav>
     </div>
     <div class="header-right">
       <div class="market-status">
@@ -591,46 +334,82 @@
     </div>
   </div>
 
+  <!-- Cron bar (watchlist only) -->
   <div class="cron-bar" id="cron-bar">
     <div class="cron-pill" id="cron-700"><div class="cron-dot"></div>7:00 AM Pre-Market</div>
-    <div class="cron-pill" id="cron-945"><div class="cron-dot"></div>9:45 AM Morning Scan</div>
+    <div class="cron-pill" id="cron-945"><div class="cron-dot"></div>9:45 AM Morning</div>
     <div class="cron-pill" id="cron-1200"><div class="cron-dot"></div>12:00 PM Midday</div>
     <div class="cron-pill" id="cron-1500"><div class="cron-dot"></div>3:00 PM Afternoon</div>
     <div class="cron-pill" id="cron-1615"><div class="cron-dot"></div>4:15 PM Close</div>
   </div>
 
-  <div class="toolbar">
-    <div class="toolbar-left">
-      <input class="search-input" id="search-input" type="text" placeholder="Filter tickers..." oninput="filterTickers()" />
-      <button class="toolbar-btn" onclick="refreshAll()">↺ Refresh</button>
-      <button class="toolbar-btn primary" onclick="openAddModal()">+ Add Ticker</button>
+  <!-- ── WATCHLIST SECTION ── -->
+  <div class="section watchlist active" id="section-watchlist">
+    <div class="toolbar">
+      <div class="toolbar-left">
+        <input class="search-input" id="search-input" type="text" placeholder="Filter tickers…" oninput="filterTickers()" />
+        <button class="toolbar-btn" onclick="refreshAll()">↺ Refresh</button>
+        <button class="toolbar-btn primary" onclick="openAddModal()">+ Add</button>
+      </div>
+      <div class="last-refresh" id="last-refresh">—</div>
     </div>
-    <div class="last-refresh" id="last-refresh">—</div>
+    <div class="watchlist">
+      <div class="section-header">
+        <div class="section-label">Watchlist</div>
+        <div class="ticker-count" id="ticker-count">—</div>
+      </div>
+      <div id="ticker-list"></div>
+    </div>
   </div>
 
-  <div class="watchlist">
-    <div class="section-header">
-      <div class="section-label">Watchlist</div>
-      <div class="ticker-count" id="ticker-count">—</div>
+  <!-- ── DISCOVERY SECTION ── -->
+  <div class="section" id="section-discovery">
+    <div class="ai-section">
+      <div class="ai-header">
+        <div>
+          <div class="ai-title">Supply Chain Discovery</div>
+          <div class="ai-subtitle">Finds Layer 2/3 supply chain names with momentum.<br>Applies all 7 vetting gates. Only survivors surface.</div>
+        </div>
+        <button class="run-btn discovery" id="disc-btn" onclick="runDiscovery()">Run Discovery</button>
+      </div>
+      <hr class="ai-divider">
+      <div class="ai-status" id="disc-status"></div>
+      <div class="ai-output empty" id="disc-output">Results will appear here after you run Discovery.</div>
     </div>
-    <div id="ticker-list"></div>
   </div>
-</div>
 
-<!-- ADD MODAL -->
+  <!-- ── CONVICTION SECTION ── -->
+  <div class="section" id="section-conviction">
+    <div class="ai-section">
+      <div class="ai-header">
+        <div>
+          <div class="ai-title">AV Conviction Score</div>
+          <div class="ai-subtitle">Enter any ticker for a full 1–10 conviction score.<br>Live data · Pre-score pressure test · Entry, stop, targets.</div>
+        </div>
+      </div>
+      <div class="ticker-input-row">
+        <input class="ticker-input" id="conv-ticker" type="text" placeholder="Ticker" maxlength="6" />
+        <button class="run-btn conviction-run" id="conv-btn" onclick="runConviction()">Run Conviction</button>
+      </div>
+      <div>
+        <div class="ai-subtitle" style="margin-bottom:6px">Quick pick from watchlist:</div>
+        <div class="quick-picks" id="quick-picks"></div>
+      </div>
+      <hr class="ai-divider">
+      <div class="ai-status" id="conv-status"></div>
+      <div class="ai-output empty" id="conv-output">Enter a ticker above and tap Run Conviction.</div>
+    </div>
+  </div>
+
+</div><!-- /dashboard -->
+
+<!-- Add Ticker Modal -->
 <div class="modal-overlay" id="modal-overlay" onclick="closeModalOnBg(event)">
   <div class="modal">
     <div class="modal-title">Add to Watchlist</div>
-    <div class="modal-field">
-      <label class="modal-label">Ticker Symbol</label>
-      <input class="modal-input" id="m-symbol" type="text" placeholder="AAPL" style="text-transform:uppercase" />
-    </div>
-    <div class="modal-field">
-      <label class="modal-label">Company Name (optional)</label>
-      <input class="modal-input" id="m-name" type="text" placeholder="Apple Inc." />
-    </div>
-    <div class="modal-field">
-      <label class="modal-label">Tier</label>
+    <div class="modal-field"><label class="modal-label">Ticker Symbol</label><input class="modal-input" id="m-symbol" type="text" placeholder="AAPL" style="text-transform:uppercase" /></div>
+    <div class="modal-field"><label class="modal-label">Company Name</label><input class="modal-input" id="m-name" type="text" placeholder="Apple Inc." /></div>
+    <div class="modal-field"><label class="modal-label">Tier</label>
       <select class="modal-input" id="m-tier">
         <option value="1">Tier 1 — Roth / Aggressive</option>
         <option value="2">Tier 2 — Taxable / Long-term</option>
@@ -639,28 +418,16 @@
       </select>
     </div>
     <div class="modal-row">
-      <div class="modal-field">
-        <label class="modal-label">Buy Zone Low</label>
-        <input class="modal-input" id="m-zone-low" type="number" step="0.01" placeholder="0.00" />
-      </div>
-      <div class="modal-field">
-        <label class="modal-label">Buy Zone High</label>
-        <input class="modal-input" id="m-zone-high" type="number" step="0.01" placeholder="0.00" />
-      </div>
+      <div class="modal-field"><label class="modal-label">Zone Low</label><input class="modal-input" id="m-zone-low" type="number" step="0.01" placeholder="0.00" /></div>
+      <div class="modal-field"><label class="modal-label">Zone High</label><input class="modal-input" id="m-zone-high" type="number" step="0.01" placeholder="0.00" /></div>
     </div>
     <div class="modal-row">
-      <div class="modal-field">
-        <label class="modal-label">Stop Loss</label>
-        <input class="modal-input" id="m-stop" type="number" step="0.01" placeholder="0.00" />
-      </div>
-      <div class="modal-field">
-        <label class="modal-label">Target 1</label>
-        <input class="modal-input" id="m-target1" type="number" step="0.01" placeholder="0.00" />
-      </div>
+      <div class="modal-field"><label class="modal-label">Stop Loss</label><input class="modal-input" id="m-stop" type="number" step="0.01" placeholder="0.00" /></div>
+      <div class="modal-field"><label class="modal-label">Target 1</label><input class="modal-input" id="m-target1" type="number" step="0.01" placeholder="0.00" /></div>
     </div>
     <div class="modal-actions">
       <button class="modal-btn cancel" onclick="closeModal()">Cancel</button>
-      <button class="modal-btn save" onclick="saveTicker()">Add Ticker</button>
+      <button class="modal-btn save" onclick="saveTicker()">Add</button>
     </div>
   </div>
 </div>
@@ -668,78 +435,54 @@
 <div class="toast" id="toast"></div>
 
 <script>
-const API_BASE = 'https://mktpxdata72.com';
-const API_KEY  = 'pifk9AGEImYHyoEhjauKbKKAYK_vOzIiVCBjHeWB0G8';
-const PIN_HASH = '200854';
+// ══ CONFIG ════════════════════════════════════════════════════════════
+const API_BASE   = 'https://mktpxdata72.com';
+const API_KEY    = 'pifk9AGEImYHyoEhjauKbKKAYK_vOzIiVCBjHeWB0G8';
+const PIN_HASH   = '200854';
+const ANTH_MODEL = 'claude-sonnet-4-6';
 
-let pinBuffer = '';
-let wrongAttempts = 0;
-let watchlist = [];
-let priceCache = {};
-let refreshTimer = null;
-let cronTimers  = [];
+// ══ STATE ════════════════════════════════════════════════════════════
+let pinBuffer = '', wrongAttempts = 0;
+let watchlist = [], priceCache = {};
+let refreshTimer = null, cronTimers = [];
+let currentTab = 'watchlist';
 
-// ── STORAGE ──
-function saveWatchlist() {
-  try { localStorage.setItem('gcc_watchlist', JSON.stringify(watchlist)); } catch(e) {}
-}
-
+// ══ STORAGE ══════════════════════════════════════════════════════════
+function saveWatchlist() { try { localStorage.setItem('gcc_watchlist', JSON.stringify(watchlist)); } catch(e) {} }
 function loadWatchlist() {
-  try {
-    const raw = localStorage.getItem('gcc_watchlist');
-    if (raw) { watchlist = JSON.parse(raw); return; }
-  } catch(e) {}
+  try { const r = localStorage.getItem('gcc_watchlist'); if (r) { watchlist = JSON.parse(r); return; } } catch(e) {}
   watchlist = [
-    { symbol:'DVN',   name:'Devon Energy',      tier:2, zoneLow:42,   zoneHigh:45,   stop:38,   target1:54  },
-    { symbol:'CVX',   name:'Chevron',            tier:2, zoneLow:0,    zoneHigh:0,    stop:0,    target1:0   },
-    { symbol:'XOM',   name:'ExxonMobil',         tier:2, zoneLow:0,    zoneHigh:0,    stop:0,    target1:0   },
-    { symbol:'NOC',   name:'Northrop Grumman',   tier:2, zoneLow:490,  zoneHigh:510,  stop:455,  target1:620 },
-    { symbol:'LMT',   name:'Lockheed Martin',    tier:2, zoneLow:470,  zoneHigh:490,  stop:435,  target1:580 },
-    { symbol:'CDRE',  name:'Cadre Holdings',     tier:2, zoneLow:29,   zoneHigh:32,   stop:26,   target1:42  },
-    { symbol:'MPTI',  name:'M-tron Industries',  tier:2, zoneLow:72,   zoneHigh:76,   stop:60,   target1:95  },
-    { symbol:'NOVT',  name:'Novanta',            tier:2, zoneLow:115,  zoneHigh:120,  stop:98,   target1:155 },
-    { symbol:'CVU',   name:'CPI Aerostructures', tier:2, zoneLow:4.2,  zoneHigh:4.6,  stop:3.75, target1:6.5 },
-    { symbol:'ROBO',  name:'ROBO Global ETF',    tier:2, zoneLow:75,   zoneHigh:80,   stop:68,   target1:100 },
-    { symbol:'RBCAA', name:'Republic Bancorp',   tier:2, zoneLow:74,   zoneHigh:78,   stop:68,   target1:95  },
-    { symbol:'MU',    name:'Micron Technology',  tier:1, zoneLow:850,  zoneHigh:900,  stop:780,  target1:1100},
-    { symbol:'VOYG',  name:'Voyager Technologies',tier:1,zoneLow:38,   zoneHigh:42,   stop:32,   target1:58  },
-    { symbol:'MRVI',  name:'Maravai LifeSci',    tier:1, zoneLow:4.0,  zoneHigh:4.3,  stop:3.6,  target1:6.5 },
-    { symbol:'FLTCF', name:'Collective Mining',  tier:2, zoneLow:5.0,  zoneHigh:5.5,  stop:4.25, target1:7.5 },
+    { symbol:'DVN',   name:'Devon Energy',       tier:2, zoneLow:42,  zoneHigh:45,  stop:38,   target1:54  },
+    { symbol:'CVX',   name:'Chevron',             tier:2, zoneLow:0,   zoneHigh:0,   stop:0,    target1:0   },
+    { symbol:'XOM',   name:'ExxonMobil',          tier:2, zoneLow:0,   zoneHigh:0,   stop:0,    target1:0   },
+    { symbol:'NOC',   name:'Northrop Grumman',    tier:2, zoneLow:490, zoneHigh:510, stop:455,  target1:620 },
+    { symbol:'LMT',   name:'Lockheed Martin',     tier:2, zoneLow:470, zoneHigh:490, stop:435,  target1:580 },
+    { symbol:'CDRE',  name:'Cadre Holdings',      tier:2, zoneLow:29,  zoneHigh:32,  stop:26,   target1:42  },
+    { symbol:'MPTI',  name:'M-tron Industries',   tier:2, zoneLow:72,  zoneHigh:76,  stop:60,   target1:95  },
+    { symbol:'NOVT',  name:'Novanta',             tier:2, zoneLow:115, zoneHigh:120, stop:98,   target1:155 },
+    { symbol:'CVU',   name:'CPI Aerostructures',  tier:2, zoneLow:4.2, zoneHigh:4.6, stop:3.75, target1:6.5 },
+    { symbol:'ROBO',  name:'ROBO Global ETF',     tier:2, zoneLow:75,  zoneHigh:80,  stop:68,   target1:100 },
+    { symbol:'RBCAA', name:'Republic Bancorp',    tier:2, zoneLow:74,  zoneHigh:78,  stop:68,   target1:95  },
+    { symbol:'MU',    name:'Micron Technology',   tier:1, zoneLow:850, zoneHigh:900, stop:780,  target1:1100},
+    { symbol:'VOYG',  name:'Voyager Technologies',tier:1, zoneLow:38,  zoneHigh:42,  stop:32,   target1:58  },
+    { symbol:'MRVI',  name:'Maravai LifeSci',     tier:1, zoneLow:4.0, zoneHigh:4.3, stop:3.6,  target1:6.5 },
+    { symbol:'FLTCF', name:'Collective Mining',   tier:2, zoneLow:5.0, zoneHigh:5.5, stop:4.25, target1:7.5 },
   ];
   saveWatchlist();
 }
 
-// ── PIN ──
-function pinPress(digit) {
-  if (pinBuffer.length >= 6) return;
-  pinBuffer += digit;
-  updateDots();
-  if (pinBuffer.length === 6) setTimeout(checkPin, 120);
-}
-
-function pinDel() {
-  if (!pinBuffer.length) return;
-  pinBuffer = pinBuffer.slice(0, -1);
-  updateDots();
-}
-
+// ══ PIN ══════════════════════════════════════════════════════════════
+function pinPress(d) { if (pinBuffer.length >= 6) return; pinBuffer += d; updateDots(); if (pinBuffer.length === 6) setTimeout(checkPin, 120); }
+function pinDel()    { if (!pinBuffer.length) return; pinBuffer = pinBuffer.slice(0,-1); updateDots(); }
 function updateDots(state) {
-  for (let i = 0; i < 6; i++) {
-    const d = document.getElementById('dot-' + i);
-    d.className = 'pin-dot';
-    if (state === 'error') { d.classList.add('error'); continue; }
-    if (i < pinBuffer.length) d.classList.add('filled');
-  }
+  for (let i=0;i<6;i++) { const d=document.getElementById('dot-'+i); d.className='pin-dot'; if(state==='error'){d.classList.add('error');continue;} if(i<pinBuffer.length)d.classList.add('filled'); }
 }
-
 function checkPin() {
   if (pinBuffer === PIN_HASH) {
     document.getElementById('pin-screen').classList.add('hidden');
     const dash = document.getElementById('dashboard');
-    dash.style.display = 'flex';
-    dash.classList.add('visible');
-    wrongAttempts = 0; pinBuffer = '';
-    updateDots();
+    dash.style.display = 'flex'; dash.classList.add('visible');
+    wrongAttempts = 0; pinBuffer = ''; updateDots();
     initDashboard();
   } else {
     wrongAttempts++;
@@ -747,349 +490,334 @@ function checkPin() {
     const msg = document.getElementById('pin-message');
     const left = 3 - wrongAttempts;
     msg.className = 'pin-message error';
-    msg.textContent = left > 0
-      ? `Incorrect — ${left} attempt${left===1?'':'s'} left`
-      : 'Too many attempts';
-    setTimeout(() => {
-      pinBuffer = ''; updateDots();
-      msg.className = 'pin-message';
-      msg.textContent = 'Enter 6-digit PIN';
-    }, 1300);
+    msg.textContent = left > 0 ? `Incorrect — ${left} attempt${left===1?'':'s'} left` : 'Too many attempts';
+    setTimeout(() => { pinBuffer=''; updateDots(); msg.className='pin-message'; msg.textContent='Enter 6-digit PIN'; }, 1300);
   }
 }
-
 function lockDashboard() {
   document.getElementById('dashboard').classList.remove('visible');
-  document.getElementById('dashboard').style.display = 'none';
+  document.getElementById('dashboard').style.display='none';
   document.getElementById('pin-screen').classList.remove('hidden');
-  pinBuffer = ''; updateDots();
-  clearTimers();
+  pinBuffer=''; updateDots(); clearTimers();
 }
-
 document.addEventListener('keydown', e => {
   if (document.getElementById('pin-screen').classList.contains('hidden')) return;
-  if (e.key >= '0' && e.key <= '9') pinPress(e.key);
-  if (e.key === 'Backspace') pinDel();
+  if (e.key>='0'&&e.key<='9') pinPress(e.key);
+  if (e.key==='Backspace') pinDel();
 });
 
-// ── MARKET HOURS ──
-function getET() {
-  return new Date(new Date().toLocaleString('en-US', { timeZone: 'America/New_York' }));
+// ══ TAB SWITCHING ════════════════════════════════════════════════════
+function switchTab(tab) {
+  currentTab = tab;
+  document.querySelectorAll('.nav-tab').forEach(t => t.classList.remove('active'));
+  document.querySelector(`.nav-tab.${tab}`).classList.add('active');
+  document.querySelectorAll('.section').forEach(s => s.classList.remove('active'));
+  document.getElementById(`section-${tab}`).classList.add('active');
+  document.getElementById('cron-bar').style.display = tab === 'watchlist' ? 'flex' : 'none';
+  if (tab === 'conviction') buildQuickPicks();
 }
 
-function isMarketOpen() {
-  const et = getET();
-  const day = et.getDay();
-  if (day === 0 || day === 6) return false;
-  const mins = et.getHours() * 60 + et.getMinutes();
-  return mins >= 570 && mins < 960;
-}
-
+// ══ MARKET / CRON ════════════════════════════════════════════════════
+function getET() { return new Date(new Date().toLocaleString('en-US',{timeZone:'America/New_York'})); }
+function isMarketOpen() { const et=getET(),d=et.getDay(),m=et.getHours()*60+et.getMinutes(); return d>0&&d<6&&m>=570&&m<960; }
 function updateMarketStatus() {
   const open = isMarketOpen();
-  document.getElementById('market-dot').className   = 'market-dot' + (open ? '' : ' closed');
+  document.getElementById('market-dot').className = 'market-dot'+(open?'':' closed');
   document.getElementById('market-label').textContent = open ? 'OPEN' : 'CLOSED';
 }
-
-// ── CRON BAR ──
-const CRON_WINDOWS = [
-  { id:'cron-700',  h:7,  m:0  },
-  { id:'cron-945',  h:9,  m:45 },
-  { id:'cron-1200', h:12, m:0  },
-  { id:'cron-1500', h:15, m:0  },
-  { id:'cron-1615', h:16, m:15 },
-];
-
+const CRON_WINDOWS = [{id:'cron-700',h:7,m:0},{id:'cron-945',h:9,m:45},{id:'cron-1200',h:12,m:0},{id:'cron-1500',h:15,m:0},{id:'cron-1615',h:16,m:15}];
 function updateCronBar() {
-  const et = getET();
-  const cur = et.getHours() * 60 + et.getMinutes();
-  CRON_WINDOWS.forEach(w => {
-    const el = document.getElementById(w.id);
-    const wm = w.h * 60 + w.m;
-    el.className = 'cron-pill';
-    if (Math.abs(cur - wm) <= 5) el.classList.add('active');
-    else if (cur > wm)           el.classList.add('done');
-  });
+  const et=getET(), cur=et.getHours()*60+et.getMinutes();
+  CRON_WINDOWS.forEach(w => { const el=document.getElementById(w.id),wm=w.h*60+w.m; el.className='cron-pill'; if(Math.abs(cur-wm)<=5)el.classList.add('active'); else if(cur>wm)el.classList.add('done'); });
 }
 
-// ── PRICE FETCH ──
+// ══ PRICE FETCH ══════════════════════════════════════════════════════
 async function fetchPrices(symbols) {
   if (!symbols.length) return {};
   try {
-    // Use /prices endpoint — serves from Railway cache populated by cron jobs
-    // Falls back to live fetch automatically if cache is stale
-    const url = `${API_BASE}/prices?symbols=${symbols.join(',')}`;
-    const res = await fetch(url, { headers: { 'x-api-key': API_KEY } });
-    if (!res.ok) throw new Error('HTTP ' + res.status);
+    const res = await fetch(`${API_BASE}/prices?symbols=${symbols.join(',')}`, { headers:{'x-api-key':API_KEY} });
+    if (!res.ok) throw new Error('HTTP '+res.status);
     const data = await res.json();
-
-    // Response shape: { source: "cache"|"live", age_seconds: N, data: { SYM: { price, change, ts } } }
-    const map = {};
-    const stale = !isMarketOpen();
-    if (data.data && typeof data.data === 'object') {
-      Object.entries(data.data).forEach(([sym, q]) => {
-        map[sym.toUpperCase()] = {
-          price:  parseFloat(q.price  || 0),
-          change: parseFloat(q.change || 0),
-          stale,
-          source: data.source || 'live',
-          age:    data.age_seconds || 0,
-        };
-      });
+    const map={}, stale=!isMarketOpen();
+    if (data.data && typeof data.data==='object') {
+      Object.entries(data.data).forEach(([sym,q]) => { map[sym.toUpperCase()]={price:parseFloat(q.price||0),change:parseFloat(q.change||0),stale}; });
     }
-
-    // Show cache age in last-refresh if served from cache
-    if (data.source === 'cache' && data.age_seconds > 0) {
-      const mins = Math.floor(data.age_seconds / 60);
-      const secs = data.age_seconds % 60;
-      const ageStr = mins > 0 ? `${mins}m ${secs}s ago` : `${secs}s ago`;
-      const et = getET().toLocaleTimeString('en-US', { hour:'2-digit', minute:'2-digit' });
-      document.getElementById('last-refresh').textContent = `Cache · refreshed ${ageStr} · ${et} ET`;
-    }
-
-    if (!Object.keys(map).length) {
-      // /prices not deployed yet — fall back to /quote
-      return await fetchPricesFallback(symbols);
-    }
+    if (!Object.keys(map).length) return await fetchPricesFallback(symbols);
     return map;
-  } catch(e) {
-    console.warn('[GCC] /prices failed, trying /quote fallback:', e.message);
-    return await fetchPricesFallback(symbols);
-  }
+  } catch(e) { return await fetchPricesFallback(symbols); }
 }
-
 async function fetchPricesFallback(symbols) {
-  // Direct /quote call — used before cron endpoint is deployed
   try {
-    const res = await fetch(`${API_BASE}/quote?symbols=${symbols.join(',')}`, {
-      headers: { 'x-api-key': API_KEY }
-    });
-    if (!res.ok) throw new Error('HTTP ' + res.status);
-    const raw  = await res.text();
-    const data = JSON.parse(raw);
-    let arr = Array.isArray(data) ? data : (data.data || data.quotes || []);
-    if (!Array.isArray(arr)) arr = Object.values(data).filter(v => v && typeof v === 'object');
-    const map = {};
-    const stale = !isMarketOpen();
-    arr.forEach(q => {
-      const sym = (q.symbol || q.ticker || '').toUpperCase();
-      if (!sym) return;
-      map[sym] = {
-        price:  parseFloat(q.price ?? q.previousClose ?? 0),
-        change: parseFloat(q.changesPercentage ?? q.changePercent ?? 0),
-        stale,
-        source: 'direct',
-      };
-    });
+    const res = await fetch(`${API_BASE}/quote?symbols=${symbols.join(',')}`, { headers:{'x-api-key':API_KEY} });
+    if (!res.ok) throw new Error('HTTP '+res.status);
+    const data = await res.json();
+    let arr = Array.isArray(data)?data:(data.data||data.quotes||[]);
+    if (!Array.isArray(arr)) arr=Object.values(data).filter(v=>v&&typeof v==='object');
+    const map={}, stale=!isMarketOpen();
+    arr.forEach(q => { const sym=(q.symbol||q.ticker||'').toUpperCase(); if(sym) map[sym]={price:parseFloat(q.price??q.previousClose??0),change:parseFloat(q.changesPercentage??q.changePercent??0),stale}; });
     return map;
-  } catch(e) {
-    showToast('Price fetch failed: ' + e.message, 'error');
-    return {};
-  }
+  } catch(e) { showToast('Price fetch failed: '+e.message,'error'); return {}; }
 }
 
-// ── ZONE LOGIC ──
-function getZoneStatus(t, price) {
-  if (!t.zoneLow && !t.zoneHigh) return 'no-zone';
-  if (!price) return 'no-zone';
-  if (price >= t.zoneLow && price <= t.zoneHigh) return 'in-zone';
-  return price > t.zoneHigh ? 'above-zone' : 'below-zone';
+// ══ ZONE LOGIC ═══════════════════════════════════════════════════════
+function getZoneStatus(t,price) { if(!t.zoneLow&&!t.zoneHigh)return 'no-zone'; if(!price)return 'no-zone'; if(price>=t.zoneLow&&price<=t.zoneHigh)return 'in-zone'; return price>t.zoneHigh?'above-zone':'below-zone'; }
+const ZONE_LABEL={'in-zone':'In Zone','above-zone':'Above Zone','below-zone':'Below Zone','no-zone':'No Zone'};
+function getZonePct(t,price) {
+  if(!price||(!t.zoneLow&&!t.zoneHigh))return '';
+  const s=getZoneStatus(t,price); if(s==='in-zone')return 'IN ZONE';
+  const ref=s==='above-zone'?t.zoneHigh:t.zoneLow; if(!ref)return '';
+  const pct=((price-ref)/ref*100).toFixed(1); return `${pct>0?'+':''}${pct}% vs zone`;
 }
 
-const ZONE_LABEL = { 'in-zone':'In Zone', 'above-zone':'Above Zone', 'below-zone':'Below Zone', 'no-zone':'No Zone' };
-
-function getZonePct(t, price) {
-  if (!price || (!t.zoneLow && !t.zoneHigh)) return '';
-  const status = getZoneStatus(t, price);
-  if (status === 'in-zone') return 'IN ZONE';
-  const ref = status === 'above-zone' ? t.zoneHigh : t.zoneLow;
-  if (!ref) return '';
-  const pct = ((price - ref) / ref * 100).toFixed(1);
-  return `${pct > 0 ? '+' : ''}${pct}% vs zone`;
-}
-
-// ── RENDER ──
-const TIER_NAMES = {
-  '1':'Tier 1 — Roth / Aggressive',
-  '2':'Tier 2 — Taxable / Long-term',
-  '3':'Tier 3 — IRA / Steady',
-  '0':'Watchlist Only',
-};
-
-// Gist tier mapping
-function gistTierToNum(t) {
-  if (!t) return 0;
-  if (t.includes('Roth') || t.includes('1')) return 1;
-  if (t.includes('Defense')) return 2;
-  if (t.includes('Taxable') || t.includes('2')) return 2;
-  if (t.includes('IRA') || t.includes('3')) return 3;
-  return 0;
-}
-
+// ══ RENDER WATCHLIST ═════════════════════════════════════════════════
+const TIER_NAMES = {'1':'Tier 1 — Roth / Aggressive','2':'Tier 2 — Taxable / Long-term','3':'Tier 3 — IRA / Steady','0':'Watchlist Only'};
 function renderList(data) {
-  const filter   = (document.getElementById('search-input').value || '').toUpperCase();
-  const filtered = watchlist.filter(t =>
-    !filter || t.symbol.includes(filter) || (t.name||'').toUpperCase().includes(filter)
-  );
-
-  document.getElementById('ticker-count').textContent =
-    `${watchlist.length} ticker${watchlist.length !== 1 ? 's' : ''}`;
-
-  if (!filtered.length) {
-    document.getElementById('ticker-list').innerHTML =
-      `<div class="empty-state">No tickers match. Add one with + Add Ticker.</div>`;
-    return;
-  }
-
-  const grouped = {};
-  filtered.forEach(t => {
-    const tier = String(t.tier ?? '0');
-    if (!grouped[tier]) grouped[tier] = [];
-    grouped[tier].push(t);
-  });
-
-  let html = '';
-  let first = true;
-  ['1','2','3','0'].forEach(tier => {
+  const filter=(document.getElementById('search-input').value||'').toUpperCase();
+  const filtered=watchlist.filter(t=>!filter||t.symbol.includes(filter)||(t.name||'').toUpperCase().includes(filter));
+  document.getElementById('ticker-count').textContent=`${watchlist.length} ticker${watchlist.length!==1?'s':''}`;
+  if (!filtered.length) { document.getElementById('ticker-list').innerHTML='<div style="text-align:center;padding:40px;color:var(--text3);font-size:13px">No tickers match.</div>'; return; }
+  const grouped={};
+  filtered.forEach(t=>{ const k=String(t.tier??'0'); if(!grouped[k])grouped[k]=[]; grouped[k].push(t); });
+  let html='',first=true;
+  ['1','2','3','0'].forEach(tier=>{
     if (!grouped[tier]) return;
-    html += `<div class="tier-label ${first ? 'tier-first' : ''}">${TIER_NAMES[tier]}</div>`;
-    first = false;
-    grouped[tier].forEach(t => {
-      const pd      = data[t.symbol];
-      const price   = pd ? pd.price  : null;
-      const change  = pd ? pd.change : null;
-      const stale   = pd ? pd.stale  : false;
-      const loading = pd === undefined;
-      const status  = price !== null ? getZoneStatus(t, price) : 'no-zone';
-      const pctStr  = price !== null ? getZonePct(t, price) : '';
-      const chClass = !change ? 'flat' : change > 0 ? 'pos' : 'neg';
-      const chStr   = change !== null ? `${change > 0 ? '+' : ''}${change.toFixed(2)}%` : '';
-      const priceStr  = price !== null ? `$${price.toFixed(2)}` : (loading ? '···' : '—');
-      const priceNote = stale && price !== null ? '<span style="font-size:9px;color:var(--text3);margin-left:4px">cls</span>' : '';
-
-      const zoneRange = (t.zoneLow || t.zoneHigh)
-        ? `<div class="zone-range-line">Zone <span>$${t.zoneLow}–$${t.zoneHigh}</span></div>
-           <div class="zone-range-line">Stop <span>$${t.stop||'—'}</span> &nbsp;·&nbsp; T1 <span>$${t.target1||'—'}</span></div>`
-        : `<div style="color:var(--text3);font-size:12px">No zone set</div>`;
-
-      const badgeClass = loading ? 'loading' : status;
-      const badgeText  = loading ? '···' : ZONE_LABEL[status] + (stale ? ' ·Cls' : '');
-
-      html += `
-        <div class="ticker-card ${status}">
-          <div class="ticker-meta">
-            <div class="ticker-symbol">${t.symbol} <span style="font-size:14px;font-weight:500;color:var(--text);font-family:var(--font);margin-left:6px">${priceStr}</span>${priceNote}</div>
-            <div class="ticker-name">${t.name||''} ${chStr ? '<span class="ticker-change ' + chClass + '">' + chStr + '</span>' : ''}</div>
-          </div>
-          <div class="ticker-zone-range">${zoneRange}</div>
-          <div class="zone-block">
-            <div class="zone-badge ${badgeClass}">${badgeText}</div>
-            <div class="zone-from">${pctStr}</div>
-          </div>
-          <div class="ticker-actions">
-            <button class="action-btn conviction" onclick="openConviction('${t.symbol}')">Conviction ↗</button>
-            <button class="action-btn remove" onclick="removeTicker('${t.symbol}')">✕</button>
-          </div>
-        </div>`;
+    html+=`<div class="tier-label ${first?'tier-first':''}">${TIER_NAMES[tier]}</div>`;
+    first=false;
+    grouped[tier].forEach(t=>{
+      const pd=data[t.symbol],price=pd?pd.price:null,change=pd?pd.change:null,stale=pd?pd.stale:false,loading=pd===undefined;
+      const status=price!==null?getZoneStatus(t,price):'no-zone';
+      const pctStr=price!==null?getZonePct(t,price):'';
+      const chClass=!change?'flat':change>0?'pos':'neg';
+      const chStr=change!==null?`${change>0?'+':''}${change.toFixed(2)}%`:'';
+      const priceStr=price!==null?`$${price.toFixed(2)}`:(loading?'···':'—');
+      const priceNote=stale&&price!==null?'<span style="font-size:9px;color:var(--text3);margin-left:3px">cls</span>':'';
+      const zoneRange=(t.zoneLow||t.zoneHigh)?`<div class="zone-range-line">Zone <span>$${t.zoneLow}–$${t.zoneHigh}</span></div><div class="zone-range-line">Stop <span>$${t.stop||'—'}</span> · T1 <span>$${t.target1||'—'}</span></div>`:'<div style="color:var(--text3);font-size:12px">No zone set</div>';
+      const badgeText=loading?'···':ZONE_LABEL[status]+(stale?'·Cls':'');
+      html+=`<div class="ticker-card ${status}">
+        <div class="ticker-meta">
+          <div class="ticker-symbol">${t.symbol} <span style="font-size:14px;font-weight:500;color:var(--text);font-family:var(--font);margin-left:5px">${priceStr}</span>${priceNote}</div>
+          <div class="ticker-name">${t.name||''} ${chStr?`<span class="ticker-change ${chClass}">${chStr}</span>`:''}</div>
+        </div>
+        <div class="ticker-zone-range">${zoneRange}</div>
+        <div class="zone-block">
+          <div class="zone-badge ${loading?'loading':status}">${badgeText}</div>
+          <div class="zone-from">${pctStr}</div>
+        </div>
+        <div class="ticker-actions">
+          <button class="action-btn conviction" onclick="goConviction('${t.symbol}')">⚡ Score</button>
+          <button class="action-btn remove" onclick="removeTicker('${t.symbol}')">✕</button>
+        </div>
+      </div>`;
     });
   });
-
-  document.getElementById('ticker-list').innerHTML = html;
+  document.getElementById('ticker-list').innerHTML=html;
 }
 
-// ── REFRESH ──
+// ══ REFRESH ══════════════════════════════════════════════════════════
 async function refreshAll() {
-  if (!watchlist.length) { renderList({}); return; }
+  if (!watchlist.length){renderList({});return;}
   renderList({});
-  const data = await fetchPrices(watchlist.map(t => t.symbol));
-  priceCache = data;
-  renderList(data);
-  const et = getET().toLocaleTimeString('en-US', { hour:'2-digit', minute:'2-digit' });
-  document.getElementById('last-refresh').textContent = `Updated ${et} ET`;
+  const data=await fetchPrices(watchlist.map(t=>t.symbol));
+  priceCache=data; renderList(data);
+  const et=getET().toLocaleTimeString('en-US',{hour:'2-digit',minute:'2-digit'});
+  document.getElementById('last-refresh').textContent=`Updated ${et} ET`;
+}
+function filterTickers(){renderList(priceCache);}
+
+// ══ ADD / REMOVE ════════════════════════════════════════════════════
+function openAddModal(){['m-symbol','m-name','m-zone-low','m-zone-high','m-stop','m-target1'].forEach(id=>document.getElementById(id).value='');document.getElementById('m-tier').value='1';document.getElementById('modal-overlay').classList.add('visible');setTimeout(()=>document.getElementById('m-symbol').focus(),50);}
+function closeModal(){document.getElementById('modal-overlay').classList.remove('visible');}
+function closeModalOnBg(e){if(e.target.id==='modal-overlay')closeModal();}
+function saveTicker(){
+  const symbol=(document.getElementById('m-symbol').value||'').trim().toUpperCase();
+  if(!symbol){showToast('Enter a ticker symbol','error');return;}
+  if(watchlist.find(t=>t.symbol===symbol)){showToast(`${symbol} already in list`,'error');return;}
+  watchlist.push({symbol,name:document.getElementById('m-name').value.trim(),tier:parseInt(document.getElementById('m-tier').value)||0,zoneLow:parseFloat(document.getElementById('m-zone-low').value)||0,zoneHigh:parseFloat(document.getElementById('m-zone-high').value)||0,stop:parseFloat(document.getElementById('m-stop').value)||0,target1:parseFloat(document.getElementById('m-target1').value)||0});
+  saveWatchlist();closeModal();showToast(`${symbol} added`,'success');refreshAll();
+}
+function removeTicker(symbol){watchlist=watchlist.filter(t=>t.symbol!==symbol);delete priceCache[symbol];saveWatchlist();renderList(priceCache);showToast(`${symbol} removed`);}
+
+// ══ CONVICTION QUICK NAV ════════════════════════════════════════════
+function goConviction(symbol) {
+  switchTab('conviction');
+  document.getElementById('conv-ticker').value = symbol;
+  setTimeout(()=>runConviction(), 100);
+}
+function buildQuickPicks() {
+  const chips = watchlist.slice(0,12).map(t=>`<button class="quick-chip" onclick="pickTicker('${t.symbol}')">${t.symbol}</button>`).join('');
+  document.getElementById('quick-picks').innerHTML = chips;
+}
+function pickTicker(symbol) { document.getElementById('conv-ticker').value = symbol; document.getElementById('conv-ticker').focus(); }
+
+// ══ ANTHROPIC API CALL ═══════════════════════════════════════════════
+async function callClaude(systemPrompt, userMessage, outputEl, statusEl, btnEl) {
+  outputEl.classList.remove('empty');
+  outputEl.textContent = '';
+  statusEl.innerHTML = '<span class="spinner"></span> Thinking…';
+  btnEl.disabled = true;
+
+  const cursor = document.createElement('span');
+  cursor.className = 'streaming-cursor';
+
+  try {
+    const res = await fetch('https://api.anthropic.com/v1/messages', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({
+        model: ANTH_MODEL,
+        max_tokens: 1000,
+        system: systemPrompt,
+        messages: [{ role: 'user', content: userMessage }]
+      })
+    });
+
+    if (!res.ok) {
+      const err = await res.text();
+      throw new Error(`API ${res.status}: ${err.slice(0,120)}`);
+    }
+
+    const data = await res.json();
+    const text = data.content?.filter(b=>b.type==='text').map(b=>b.text).join('') || '';
+    outputEl.textContent = text;
+    statusEl.innerHTML = '✓ Complete';
+    setTimeout(()=>{ statusEl.innerHTML=''; },3000);
+
+  } catch(e) {
+    outputEl.textContent = 'Error: ' + e.message;
+    outputEl.classList.add('empty');
+    statusEl.innerHTML = '';
+    showToast('Claude API error','error');
+  } finally {
+    btnEl.disabled = false;
+    cursor.remove();
+  }
 }
 
-function filterTickers() { renderList(priceCache); }
+// ══ DISCOVERY ════════════════════════════════════════════════════════
+const DISCOVERY_SYSTEM = `You are Gary\'s supply chain discovery engine. Gary is a self-directed investor looking for undiscovered Layer 2 and Layer 3 supply chain names BEFORE they run.
 
-// ── ADD / REMOVE ──
-function openAddModal() {
-  ['m-symbol','m-name','m-zone-low','m-zone-high','m-stop','m-target1'].forEach(id => {
-    document.getElementById(id).value = '';
-  });
-  document.getElementById('m-tier').value = '1';
-  document.getElementById('modal-overlay').classList.add('visible');
-  setTimeout(() => document.getElementById('m-symbol').focus(), 50);
-}
+HARD FILTERS — every name must pass ALL:
+- YTD return under 40% (over 40% = already discovered)
+- Under 8 analysts covering
+- Under $3B market cap preferred
+- Lagging the headline theme by 25%+ YTD (the gap IS the opportunity)
+- Headline theme confirmed moving 20%+ YTD
 
-function closeModal()        { document.getElementById('modal-overlay').classList.remove('visible'); }
-function closeModalOnBg(e)   { if (e.target.id === 'modal-overlay') closeModal(); }
+THEMES TO CHECK (always scan all, never skip):
+Nuclear, Power Infrastructure/AI Data Centers, Space Supply Chain, Quantum Computing, Memory/Semiconductor Equipment, Defense Autonomy, Robotics, and any emerging theme with momentum today.
 
-function saveTicker() {
-  const symbol = (document.getElementById('m-symbol').value || '').trim().toUpperCase();
-  if (!symbol) { showToast('Enter a ticker symbol', 'error'); return; }
-  if (watchlist.find(t => t.symbol === symbol)) { showToast(`${symbol} already in list`, 'error'); return; }
-  watchlist.push({
-    symbol,
-    name:     document.getElementById('m-name').value.trim(),
-    tier:     parseInt(document.getElementById('m-tier').value) || 0,
-    zoneLow:  parseFloat(document.getElementById('m-zone-low').value)  || 0,
-    zoneHigh: parseFloat(document.getElementById('m-zone-high').value) || 0,
-    stop:     parseFloat(document.getElementById('m-stop').value)      || 0,
-    target1:  parseFloat(document.getElementById('m-target1').value)   || 0,
-  });
-  saveWatchlist();
-  closeModal();
-  showToast(`${symbol} added`, 'success');
-  refreshAll();
-}
+LAYER HIERARCHY:
+- Layer 0 (skip): ETFs, large caps, already-known names
+- Layer 1 (verify YTD — often already run)
+- Layer 2 (start here): sub-component manufacturers, specialty material suppliers
+- Layer 3 (best zone): single-source parts, niche engineering, specialty services
 
-function removeTicker(symbol) {
-  watchlist = watchlist.filter(t => t.symbol !== symbol);
-  delete priceCache[symbol];
-  saveWatchlist();
-  renderList(priceCache);
-  showToast(`${symbol} removed`);
-}
+PHASE 0 VETTING — every candidate must pass all 7 gates:
+1. Insider selling pattern (kill if net sellers >60% over 90 days)
+2. Balance sheet health (Piotroski F-Score + Altman Z-Score)
+3. Analyst coverage and grade direction (kill if >8 analysts OR 2+ recent downgrades)
+4. Price target vs current price (kill if at or above consensus PT)
+5. Legal/dilution overhang (kill on: class action, SEC investigation, going concern, ATM offering, shelf registration, restatement, subpoena, delisted)
+6. Competitive spec gap (must have specific defensible moat vs incumbent)
+7. Customer concentration (kill if single customer >30% revenue with no multi-year contract)
 
-// ── CONVICTION ──
-function openConviction(symbol) {
-  const t = watchlist.find(t => t.symbol === symbol);
-  const price = priceCache[symbol] ? `$${priceCache[symbol].price.toFixed(2)}` : 'current price';
-  const zone  = t?.zoneLow ? `Zone $${t.zoneLow}–$${t.zoneHigh}` : 'no zone set';
-  window.open(
-    `https://claude.ai/new?q=${encodeURIComponent(`Run AV conviction score on ${symbol}. Price: ${price}. ${zone}. Tier ${t?.tier||'?'}.`)}`,
-    '_blank'
+OUTPUT FORMAT:
+- Start with confirmed themes and momentum evidence
+- For each surviving name: ticker, what they make, why undiscovered (analyst count, cap, YTD%), divergence gap, tier placement (Tier 1 Roth or Tier 2 Taxable)
+- If nothing passes all gates: say so explicitly. Zero is a valid result.
+- Be direct. No filler. Gary reads this before the market opens.`;
+
+async function runDiscovery() {
+  const out = document.getElementById('disc-output');
+  const status = document.getElementById('disc-status');
+  const btn = document.getElementById('disc-btn');
+  const today = new Date().toLocaleDateString('en-US',{weekday:'long',year:'numeric',month:'long',day:'numeric'});
+  await callClaude(
+    DISCOVERY_SYSTEM,
+    `Run supply chain discovery for ${today}. Find Layer 2 and Layer 3 names with momentum. Apply all filters and vetting gates. Surface only names that pass everything.`,
+    out, status, btn
   );
 }
 
-// ── TOAST ──
+// ══ CONVICTION ═══════════════════════════════════════════════════════
+const CONVICTION_SYSTEM = `You are Gary\'s AV conviction scoring engine. Produce a 1–10 conviction score using his exact framework.
+
+SCORING FRAMEWORK:
+- 9-10: Must buy now
+- 7-8: Strong buy
+- 5-6: Watch/hold
+- 3-4: Wait for better entry
+- 1-2: Avoid
+
+RSI SIGNALS:
+- RSI <30: oversold, strong entry
+- RSI 30-50 rising: bullish setup
+- RSI 50-70: neutral
+- RSI >70: overbought, caution
+
+EPS BEATS: 4/4 = +1 conviction, 3/4 = positive, 2/4 = neutral, 1/4 or 0/4 = -1
+
+PEG / TIER:
+- PEG <1.0: Tier 2 Taxable acceptable
+- PEG 1.0-2.0: Tier 2 Taxable acceptable
+- PEG 2.0-3.0: cautious Tier 2
+- PEG 3.0-5.0: Tier 1 Roth only
+- PEG >5.0: Tier 1 Roth only or avoid
+
+PRE-SCORE PRESSURE TEST — answer all before scoring:
+1. Volume Gate: volume trend vs average (10 sessions)
+2. Offering Gate: last offering price vs current
+3. Going Concern Gate: any unresolved warnings?
+4. Catalyst Reality: genuine new info or re-presentation of known data?
+5. Downside Anchor: actual 52-week low and cash/share
+6. Insider Quality: open market buys? % of position? 10b5-1?
+7. Bear Case: 2 sentences — what would make this go down 50%?
+
+Score ceiling rules: going concern unresolved = max 5, stock below offering = max 7, volume below avg with imminent catalyst = max 6.
+
+OUTPUT FORMAT:
+Metric table (P/E, PEG, analyst target, RSI, 52wk range, volume, rev growth, mkt cap)
+EPS last 4 quarters with beat/miss
+Pre-score pressure test results
+CONVICTION SCORE: X/10
+Verdict (2-3 direct sentences, no hedging)
+Bear case
+Tier placement
+Entry / Stop / Target 1 / Target 2
+Biggest single risk`;
+
+async function runConviction() {
+  const ticker = (document.getElementById('conv-ticker').value||'').trim().toUpperCase();
+  if (!ticker) { showToast('Enter a ticker first','error'); return; }
+  const out = document.getElementById('conv-output');
+  const status = document.getElementById('conv-status');
+  const btn = document.getElementById('conv-btn');
+  const pd = priceCache[ticker];
+  const priceNote = pd ? ` Current price: $${pd.price.toFixed(2)}.` : '';
+  const wl = watchlist.find(t=>t.symbol===ticker);
+  const zoneNote = wl?.zoneLow ? ` My zone: $${wl.zoneLow}–$${wl.zoneHigh}. Stop: $${wl.stop}. Target: $${wl.target1}.` : '';
+  await callClaude(
+    CONVICTION_SYSTEM,
+    `Run full AV conviction score on ${ticker}.${priceNote}${zoneNote} Fetch live data, run pre-score pressure test, give me a direct verdict.`,
+    out, status, btn
+  );
+}
+
+// ══ TOAST ════════════════════════════════════════════════════════════
 let toastTimer;
-function showToast(msg, type) {
-  const t = document.getElementById('toast');
-  t.textContent = msg;
-  t.className = 'toast visible' + (type ? ` ${type}` : '');
-  clearTimeout(toastTimer);
-  toastTimer = setTimeout(() => { t.className = 'toast'; }, 2800);
-}
+function showToast(msg,type){const t=document.getElementById('toast');t.textContent=msg;t.className='toast visible'+(type?` ${type}`:'');clearTimeout(toastTimer);toastTimer=setTimeout(()=>{t.className='toast';},2800);}
 
-// ── TIMERS ──
-function clearTimers() {
-  if (refreshTimer) clearInterval(refreshTimer);
-  cronTimers.forEach(clearInterval);
-  cronTimers = [];
-}
+// ══ TIMERS ═══════════════════════════════════════════════════════════
+function clearTimers(){if(refreshTimer)clearInterval(refreshTimer);cronTimers.forEach(clearInterval);cronTimers=[];}
 
-// ── INIT ──
+// ══ INIT ═════════════════════════════════════════════════════════════
 function initDashboard() {
-  loadWatchlist();
-  updateMarketStatus();
-  updateCronBar();
-  refreshAll();
+  loadWatchlist(); updateMarketStatus(); updateCronBar(); refreshAll();
   clearTimers();
-  refreshTimer = setInterval(() => { if (isMarketOpen()) refreshAll(); }, 60000);
-  cronTimers.push(setInterval(updateMarketStatus, 30000));
-  cronTimers.push(setInterval(updateCronBar, 60000));
+  refreshTimer = setInterval(()=>{if(isMarketOpen())refreshAll();},60000);
+  cronTimers.push(setInterval(updateMarketStatus,30000));
+  cronTimers.push(setInterval(updateCronBar,60000));
 }
 </script>
 </body>
 </html>
-
