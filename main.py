@@ -1784,6 +1784,84 @@ async def discovery_scan(
         },
         "flagged": flagged,
     })
+
+# ── HISTORY ENDPOINT ────────────────────────────────────────────────────────────
+# NEW /history ENDPOINT — add before the /gcc route at bottom of main.py
+
+@app.get("/history")
+async def history(
+    symbol: str = Query(...),
+    months: int = Query(default=18),
+    _key=Depends(verify_key)
+):
+    """
+    Returns daily OHLC price history for a symbol.
+    Used by Range Trader scan Gate 1 to count confirmed floor/ceiling touches.
+    Default: 18 months of daily closes.
+    """
+    sym = symbol.upper()
+    # FMP historical-price-full returns daily OHLC
+    # We calculate the from-date based on months requested
+    from datetime import datetime as dt, timedelta
+    from_date = (dt.utcnow() - timedelta(days=int(months * 30.44))).strftime("%Y-%m-%d")
+    to_date   = dt.utcnow().strftime("%Y-%m-%d")
+
+    async with httpx.AsyncClient() as client:
+        r = await fmp(client, "historical-price-full", {
+            "symbol": sym,
+            "from": from_date,
+            "to": to_date,
+        })
+
+    # FMP returns { "symbol": "X", "historical": [...] }
+    if isinstance(r, dict) and "historical" in r:
+        raw = r["historical"]
+    elif isinstance(r, list):
+        raw = r
+    else:
+        return no_cache({
+            "symbol": sym,
+            "error": "No historical data returned",
+            "raw": str(r)[:200],
+            "timestamp": dt.utcnow().isoformat()
+        })
+
+    # Build clean OHLC list sorted oldest → newest
+    ohlc = []
+    for bar in raw:
+        ohlc.append({
+            "date":   str(bar.get("date", ""))[:10],
+            "open":   bar.get("open"),
+            "high":   bar.get("high"),
+            "low":    bar.get("low"),
+            "close":  bar.get("close") or bar.get("adjClose"),
+            "volume": bar.get("volume"),
+        })
+    # Sort ascending (oldest first)
+    ohlc.sort(key=lambda x: x["date"])
+
+    # Basic stats for Gate 1 convenience
+    if ohlc:
+        closes     = [b["close"] for b in ohlc if b["close"]]
+        highs      = [b["high"]  for b in ohlc if b["high"]]
+        lows       = [b["low"]   for b in ohlc if b["low"]]
+        period_high = round(max(highs), 2) if highs else None
+        period_low  = round(min(lows), 2)  if lows  else None
+    else:
+        period_high = period_low = None
+
+    return no_cache({
+        "symbol":        sym,
+        "timestamp":     dt.utcnow().isoformat(),
+        "months":        months,
+        "from_date":     from_date,
+        "to_date":       to_date,
+        "bars_returned": len(ohlc),
+        "period_high":   period_high,
+        "period_low":    period_low,
+        "ohlc":          ohlc,
+    })
+
 # ── Gary Command Center ───────────────────────────────────────────────────────
 from pathlib import Path
 
