@@ -648,6 +648,44 @@ function buildQuickPicks() {
 }
 function pickTicker(symbol) { document.getElementById('conv-ticker').value = symbol; document.getElementById('conv-ticker').focus(); }
 
+// ══ MARKDOWN RENDERER ════════════════════════════════════════════════
+function renderMd(text) {
+  return text
+    // Headers
+    .replace(/^### (.+)$/gm, '<h3 style="color:var(--text);font-size:13px;margin:14px 0 6px;font-family:var(--sans)">$1</h3>')
+    .replace(/^## (.+)$/gm,  '<h2 style="color:var(--text);font-size:14px;margin:16px 0 6px;font-family:var(--sans);border-bottom:1px solid var(--border);padding-bottom:4px">$1</h2>')
+    .replace(/^# (.+)$/gm,   '<h1 style="color:var(--blue);font-size:15px;margin:0 0 12px;font-family:var(--sans)">$1</h1>')
+    // Bold
+    .replace(/\*\*(.+?)\*\*/g, '<strong style="color:var(--text)">$1</strong>')
+    // Tables - header row
+    .replace(/^\|(.+)\|$/gm, (match) => {
+      const cells = match.split('|').filter(c => c.trim() && !c.match(/^[-\s]+$/));
+      if (!cells.length) return '';
+      return '<tr>' + cells.map(c => `<td style="padding:4px 10px;border:1px solid var(--border);font-size:11px">${c.trim()}</td>`).join('') + '</tr>';
+    })
+    // Wrap consecutive tr in table
+    .replace(/(<tr>.*<\/tr>
+?)+/gs, m => `<table style="border-collapse:collapse;width:100%;margin:8px 0;font-family:var(--font)">${m}</table>`)
+    // Horizontal rules
+    .replace(/^---$/gm, '<hr style="border:none;border-top:1px solid var(--border);margin:12px 0">')
+    // Bullets
+    .replace(/^- (.+)$/gm, '<div style="padding:2px 0 2px 14px;position:relative"><span style="position:absolute;left:4px;color:var(--text3)">·</span>$1</div>')
+    // Checkmarks/crosses
+    .replace(/✅/g, '<span style="color:var(--green)">✅</span>')
+    .replace(/❌/g, '<span style="color:var(--red)">❌</span>')
+    .replace(/⚠️/g, '<span style="color:var(--amber)">⚠️</span>')
+    .replace(/🔴/g, '<span style="color:var(--red)">🔴</span>')
+    .replace(/🎯/g, '🎯')
+    .replace(/🐻/g, '🐻')
+    .replace(/📊/g, '📊')
+    .replace(/📈/g, '📈')
+    .replace(/📐/g, '📐')
+    .replace(/📁/g, '📁')
+    // Line breaks
+    .replace(/
+/g, '<br>');
+}
+
 // ══ CLAUDE PROXY CALL ════════════════════════════════════════════════
 async function callClaude(system, message, outputEl, statusEl, btnEl, btnText) {
   outputEl.classList.remove('empty');
@@ -660,15 +698,15 @@ async function callClaude(system, message, outputEl, statusEl, btnEl, btnText) {
     const res = await fetch(`${API_BASE}/claude`, {
       method: 'POST',
       headers: { 'Content-Type': 'application/json', 'x-api-key': API_KEY },
-      body: JSON.stringify({ system, message, max_tokens: 2000 })
+      body: JSON.stringify({ system, message, max_tokens: 4000 })
     });
     if (!res.ok) throw new Error('HTTP ' + res.status);
     const data = await res.json();
-    outputEl.textContent = data.text || 'No response received.';
+    outputEl.innerHTML = renderMd(data.text || 'No response received.');
     statusEl.innerHTML = '✓ Done';
     setTimeout(() => { statusEl.innerHTML = ''; }, 3000);
   } catch(e) {
-    outputEl.textContent = 'Error: ' + e.message;
+    outputEl.innerHTML = '<span style="color:var(--red)">Error: ' + e.message + '</span>';
     outputEl.classList.add('empty');
     statusEl.innerHTML = '';
     showToast('Error: ' + e.message, 'error');
