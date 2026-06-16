@@ -637,11 +637,22 @@ function loadWatchlist() {
     if (raw) { watchlist = JSON.parse(raw); return; }
   } catch(e) {}
   watchlist = [
-    { symbol:'NVDA', name:'Nvidia',       tier:1, zoneLow:110, zoneHigh:125, stop:98,  target1:155 },
-    { symbol:'PLTR', name:'Palantir',     tier:1, zoneLow:88,  zoneHigh:96,  stop:78,  target1:120 },
-    { symbol:'RKLB', name:'Rocket Lab',   tier:1, zoneLow:18,  zoneHigh:22,  stop:14,  target1:32  },
-    { symbol:'SPY',  name:'S&P 500 ETF',  tier:2, zoneLow:505, zoneHigh:520, stop:490, target1:545 },
-    { symbol:'DVN',  name:'Devon Energy', tier:2, zoneLow:30,  zoneHigh:34,  stop:26,  target1:44  },
+    { symbol:'DVN',   name:'Devon Energy',      tier:2, zoneLow:42,   zoneHigh:45,   stop:38,   target1:54  },
+    { symbol:'CVX',   name:'Chevron',            tier:2, zoneLow:0,    zoneHigh:0,    stop:0,    target1:0   },
+    { symbol:'XOM',   name:'ExxonMobil',         tier:2, zoneLow:0,    zoneHigh:0,    stop:0,    target1:0   },
+    { symbol:'NOC',   name:'Northrop Grumman',   tier:2, zoneLow:490,  zoneHigh:510,  stop:455,  target1:620 },
+    { symbol:'LMT',   name:'Lockheed Martin',    tier:2, zoneLow:470,  zoneHigh:490,  stop:435,  target1:580 },
+    { symbol:'CDRE',  name:'Cadre Holdings',     tier:2, zoneLow:29,   zoneHigh:32,   stop:26,   target1:42  },
+    { symbol:'MPTI',  name:'M-tron Industries',  tier:2, zoneLow:72,   zoneHigh:76,   stop:60,   target1:95  },
+    { symbol:'NOVT',  name:'Novanta',            tier:2, zoneLow:115,  zoneHigh:120,  stop:98,   target1:155 },
+    { symbol:'CVU',   name:'CPI Aerostructures', tier:2, zoneLow:4.2,  zoneHigh:4.6,  stop:3.75, target1:6.5 },
+    { symbol:'ROBO',  name:'ROBO Global ETF',    tier:2, zoneLow:75,   zoneHigh:80,   stop:68,   target1:100 },
+    { symbol:'RBCAA', name:'Republic Bancorp',   tier:2, zoneLow:74,   zoneHigh:78,   stop:68,   target1:95  },
+    { symbol:'MU',    name:'Micron Technology',  tier:1, zoneLow:850,  zoneHigh:900,  stop:780,  target1:1100},
+    { symbol:'VOYG',  name:'Voyager Technologies',tier:1,zoneLow:38,   zoneHigh:42,   stop:32,   target1:58  },
+    { symbol:'MRVI',  name:'Maravai LifeSci',    tier:1, zoneLow:4.0,  zoneHigh:4.3,  stop:3.6,  target1:6.5 },
+    { symbol:'FLTCF', name:'Collective Mining',  tier:2, zoneLow:5.0,  zoneHigh:5.5,  stop:4.25, target1:7.5 },
+    { symbol:'QNT',   name:'Quanta (watchlist)', tier:1, zoneLow:38,   zoneHigh:44,   stop:32,   target1:65  },
   ];
   saveWatchlist();
 }
@@ -832,6 +843,16 @@ const TIER_NAMES = {
   '0':'Watchlist Only',
 };
 
+// Gist tier mapping
+function gistTierToNum(t) {
+  if (!t) return 0;
+  if (t.includes('Roth') || t.includes('1')) return 1;
+  if (t.includes('Defense')) return 2;
+  if (t.includes('Taxable') || t.includes('2')) return 2;
+  if (t.includes('IRA') || t.includes('3')) return 3;
+  return 0;
+}
+
 function renderList(data) {
   const filter   = (document.getElementById('search-input').value || '').toUpperCase();
   const filtered = watchlist.filter(t =>
@@ -998,3 +1019,4 @@ function initDashboard() {
 </script>
 </body>
 </html>
+
