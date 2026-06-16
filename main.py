@@ -2433,3 +2433,41 @@ async def claude_result(job_id: str):
 async def claude_test():
     key = os.environ.get("ANTHROPIC_API_KEY", "")
     return {"key_loaded": bool(key), "key_prefix": key[:12] + "..." if key else "MISSING"}
+# ── Stock Lookup Endpoint (for GCC ticker lookup card) ────────────────────────
+# Add this to main.py. Returns price, change, RSI, analyst target, and metrics
+# in one call. Eliminates the need to chain /quote + /conviction.
+
+@app.get("/lookup", dependencies=[Depends(verify_key)])
+async def stock_lookup(symbol: str = Query(...)):
+    """
+    Single endpoint for GCC ticker lookup card.
+    Returns: price, change$, change%, 52wk high/low, RSI, analyst target,
+             volume, market cap, P/E forward, company name.
+    """
+    sym = symbol.upper().strip()
+    async with httpx.AsyncClient() as client:
+        # Fetch quote + RSI + analyst target in parallel
+        quote_task  = fmp(client, "quote", {"symbol": sym})
+        rsi_task    = fmp(client, "technical-indicator/daily/rsi", {"symbol": sym, "period": 14, "limit": 1})
+        target_task = fmp(client, "price-target-consensus", {"symbol": sym})
+
+        quote_raw, rsi_raw, target_raw = await asyncio.gather(quote_task, rsi_task, target_task)
+
+    q   = first(quote_raw)
+    rsi = first(rsi_raw)
+    tgt = first(target_raw)
+
+    return no_cache({
+        "symbol":        q.get("symbol", sym),
+        "name":          q.get("name", ""),
+        "price":         q.get("price", 0),
+        "change":        q.get("change", 0),          # dollar change
+        "changePct":     q.get("changesPercentage", 0), # percent change
+        "yearHigh":      q.get("yearHigh", 0),
+        "yearLow":       q.get("yearLow", 0),
+        "volume":        q.get("volume", 0),
+        "marketCap":     q.get("marketCap", 0),
+        "pe":            q.get("pe", 0),
+        "rsi":           rsi.get("rsi", None) if isinstance(rsi, dict) else None,
+        "analystTarget": tgt.get("targetConsensus", None) if isinstance(tgt, dict) else None,
+    })
