@@ -2509,3 +2509,19 @@ async def stock_lookup(symbol: str = Query(...)):
         "eps":           float(eps) if eps is not None else None,
     })
 
+@app.get("/debug/lookup", dependencies=[Depends(verify_key)])
+async def debug_lookup(symbol: str = Query(...)):
+    sym = symbol.upper().strip()
+    async with httpx.AsyncClient() as client:
+        results = await asyncio.gather(
+            fmp(client, "profile", {"symbol": sym}),
+            fmp(client, "ratios-ttm", {"symbol": sym}),
+            fmp(client, "key-metrics-ttm", {"symbol": sym}),
+            fmp(client, "stock-price-change", {"symbol": sym}),
+        )
+    return {
+        "profile":     results[0],
+        "ratios_ttm":  results[1],
+        "metrics_ttm": results[2],
+        "price_change": results[3],
+    }
