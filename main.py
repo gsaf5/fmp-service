@@ -1862,6 +1862,205 @@ async def history(
         "ohlc":          ohlc,
     })
 
+
+# ── HISTORY ANALYZE ENDPOINT ─────────────────────────────────────────────────────
+
+@app.get("/history/analyze")
+async def history_analyze(
+    symbol: str = Query(...),
+    months: int = Query(default=18),
+    tolerance: float = Query(default=0.03),
+    _key=Depends(verify_key)
+):
+    """
+    Gate 1 automation for Range Trader scan.
+    Pulls 18-month OHLC, identifies the stock's INTERNAL trading box
+    (not just 52wk high/low), counts floor and ceiling touches,
+    confirms round trips, and returns Gate 1 pass/fail with full detail.
+    
+    tolerance: how close to floor/ceiling counts as a touch (default 3%)
+    """
+    sym = symbol.upper()
+    from datetime import datetime as dt, timedelta
+
+    from_date = (dt.utcnow() - timedelta(days=int(months * 30.44))).strftime("%Y-%m-%d")
+    to_date   = dt.utcnow().strftime("%Y-%m-%d")
+
+    async with httpx.AsyncClient() as client:
+        r = await fmp(client, "historical-price-eod/full", {
+            "symbol": sym,
+            "from": from_date,
+            "to": to_date,
+        })
+
+    if isinstance(r, dict) and "historical" in r:
+        raw = r["historical"]
+    elif isinstance(r, list):
+        raw = r
+    else:
+        return no_cache({
+            "symbol": sym, "gate1_pass": False,
+            "error": "No historical data", "timestamp": dt.utcnow().isoformat()
+        })
+
+    # Sort ascending
+    ohlc = sorted([
+        {
+            "date":   str(b.get("date", ""))[:10],
+            "open":   b.get("open"),
+            "high":   b.get("high"),
+            "low":    b.get("low"),
+            "close":  b.get("close") or b.get("adjClose"),
+            "volume": b.get("volume"),
+        }
+        for b in raw if b.get("close") or b.get("adjClose")
+    ], key=lambda x: x["date"])
+
+    if len(ohlc) < 60:
+        return no_cache({
+            "symbol": sym, "gate1_pass": False,
+            "error": f"Insufficient data: only {len(ohlc)} bars",
+            "timestamp": dt.utcnow().isoformat()
+        })
+
+    closes = [b["close"] for b in ohlc if b["close"]]
+    lows   = [b["low"]   for b in ohlc if b["low"]]
+    highs  = [b["high"]  for b in ohlc if b["high"]]
+
+    period_low  = min(lows)
+    period_high = max(highs)
+    raw_box_width = (period_high - period_low) / period_low * 100
+
+    # ── INTERNAL BOX DETECTION ────────────────────────────────────────────────
+    # The 52wk high/low may be a single spike. We want the REPEATED trading range.
+    # Method: trim the top 5% and bottom 5% of daily closes to find the
+    # "body" range the stock actually oscillates within.
+    sorted_closes = sorted(closes)
+    trim = max(1, int(len(sorted_closes) * 0.05))
+    body_low  = sorted_closes[trim]
+    body_high = sorted_closes[-trim]
+    body_width = (body_high - body_low) / body_low * 100
+
+    # Gate 2 check: internal box width 18-35% is ideal
+    # We use body range for gate scoring but report both
+    floor_level   = body_low  * (1 + tolerance)
+    ceiling_level = body_high * (1 - tolerance)
+
+    # ── TOUCH COUNTING ────────────────────────────────────────────────────────
+    # Minimum 10 trading days between touches to count as distinct
+    floor_touches   = []
+    ceiling_touches = []
+    last_floor_idx   = -999
+    last_ceiling_idx = -999
+
+    for i, bar in enumerate(ohlc):
+        low  = bar.get("low")  or 0
+        high = bar.get("high") or 0
+
+        if low and low <= floor_level and (i - last_floor_idx) >= 10:
+            floor_touches.append({
+                "date": bar["date"],
+                "low": round(low, 2),
+                "pct_from_body_low": round(((low - body_low) / body_low) * 100, 1)
+            })
+            last_floor_idx = i
+
+        if high and high >= ceiling_level and (i - last_ceiling_idx) >= 10:
+            ceiling_touches.append({
+                "date": bar["date"],
+                "high": round(high, 2),
+                "pct_from_body_high": round(((high - body_high) / body_high) * 100, 1)
+            })
+            last_ceiling_idx = i
+
+    # ── ROUND TRIP COUNTING ───────────────────────────────────────────────────
+    # A round trip = floor touch followed by ceiling touch (or vice versa)
+    # Merge all touches with type, sort by date, count direction changes
+    all_touches = (
+        [{"date": t["date"], "type": "floor"}   for t in floor_touches] +
+        [{"date": t["date"], "type": "ceiling"} for t in ceiling_touches]
+    )
+    all_touches.sort(key=lambda x: x["date"])
+
+    round_trips = 0
+    last_type = None
+    for touch in all_touches:
+        if last_type and touch["type"] != last_type:
+            if touch["type"] == "floor":  # completed ceiling→floor = half trip
+                round_trips += 0.5
+            else:                          # completed floor→ceiling = half trip
+                round_trips += 0.5
+        last_type = touch["type"]
+    round_trips = int(round_trips)  # full round trips only
+
+    # ── GATE 1 SCORING ────────────────────────────────────────────────────────
+    floor_count   = len(floor_touches)
+    ceiling_count = len(ceiling_touches)
+
+    gate1_pass = (
+        floor_count   >= 3 and
+        ceiling_count >= 3 and
+        round_trips   >= 2
+    )
+
+    # ── BOX WIDTH GATE ────────────────────────────────────────────────────────
+    box_width_pass = 18 <= body_width <= 90  # 90% ceiling per Gemini/NSSC discussion
+
+    # ── CURRENT PRICE LOCATION ────────────────────────────────────────────────
+    current_price = closes[-1] if closes else 0
+    if body_high > body_low:
+        price_pct_of_box = round(((current_price - body_low) / (body_high - body_low)) * 100, 1)
+    else:
+        price_pct_of_box = None
+
+    # Zone determination
+    bottom_15 = body_low + (body_high - body_low) * 0.15
+    bottom_30 = body_low + (body_high - body_low) * 0.30
+    if current_price <= bottom_15:
+        zone = "TIER2_BUY"
+    elif current_price <= bottom_30:
+        zone = "TIER1_BUY"
+    elif current_price >= body_high * (1 - tolerance):
+        zone = "NEAR_CEILING"
+    else:
+        zone = "MID_RANGE"
+
+    return no_cache({
+        "symbol":      sym,
+        "timestamp":   dt.utcnow().isoformat(),
+        "months":      months,
+        "bars":        len(ohlc),
+        "gate1": {
+            "pass":            gate1_pass,
+            "floor_touches":   floor_count,
+            "ceiling_touches": ceiling_count,
+            "round_trips":     round_trips,
+            "requirement":     "3+ floor, 3+ ceiling, 2+ round trips",
+            "verdict":         "✅ PASS — confirmed range trader" if gate1_pass else "❌ FAIL — not a confirmed oscillator",
+        },
+        "box": {
+            "body_low":        round(body_low, 2),
+            "body_high":       round(body_high, 2),
+            "body_width_pct":  round(body_width, 1),
+            "period_low":      round(period_low, 2),
+            "period_high":     round(period_high, 2),
+            "raw_width_pct":   round(raw_box_width, 1),
+            "width_gate_pass": box_width_pass,
+            "floor_level":     round(floor_level, 2),
+            "ceiling_level":   round(ceiling_level, 2),
+            "tolerance_pct":   tolerance * 100,
+        },
+        "current_price": round(current_price, 2),
+        "price_location": {
+            "pct_of_box":  price_pct_of_box,
+            "zone":        zone,
+            "tier2_buy_under": round(bottom_15, 2),
+            "tier1_buy_under": round(bottom_30, 2),
+        },
+        "floor_touch_dates":   [t["date"] for t in floor_touches],
+        "ceiling_touch_dates": [t["date"] for t in ceiling_touches],
+    })
+
 # ── Gary Command Center ───────────────────────────────────────────────────────
 from pathlib import Path
 
