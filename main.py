@@ -2434,9 +2434,9 @@ async def claude_test():
     key = os.environ.get("ANTHROPIC_API_KEY", "")
     return {"key_loaded": bool(key), "key_prefix": key[:12] + "..." if key else "MISSING"}
 
-# ── Stock Lookup Endpoint v8 ─────────────────────────────────────────────────
+# ── Stock Lookup Endpoint v9 ─────────────────────────────────────────────────
 # REPLACE the existing /lookup endpoint in main.py with this.
-# Adds individual analyst price targets alongside grades.
+# Uses price-target endpoint directly for analyst rows — includes price targets natively.
 
 @app.get("/lookup", dependencies=[Depends(verify_key)])
 async def stock_lookup(symbol: str = Query(...), x_api_key: str = Header(default=None), apikey: str = Query(default=None)):
@@ -2444,13 +2444,12 @@ async def stock_lookup(symbol: str = Query(...), x_api_key: str = Header(default
     key = x_api_key or apikey or ""
 
     async with httpx.AsyncClient(timeout=30) as client:
-        # Call conviction internally for confirmed fields
         conv_task   = client.get(
             f"http://localhost:{os.environ.get('PORT', 8080)}/conviction",
             params={"symbol": sym},
             headers={"x-api-key": key}
         )
-        # Call price-target endpoint for individual analyst targets
+        # price-target returns: analystCompany, priceTarget, newsTitle, newsURL, newsPublisher, dateUpdated, newGrade
         target_task = fmp(client, "price-target", {"symbol": sym, "limit": 5})
 
         conv_resp, target_raw = await asyncio.gather(conv_task, target_task)
@@ -2474,36 +2473,26 @@ async def stock_lookup(symbol: str = Query(...), x_api_key: str = Header(default
 
     rsi = float(tec.get("rsi_proxy") or 0) or None
     ytd = float((tec.get("momentum") or {}).get("ytd") or 0) or None
-
     rev = (fun.get("revenue_trend") or [{}])
     eps = float(rev[0].get("eps") or 0) if rev else None
-
     pts = ana.get("price_targets", {})
     apt = float(pts.get("last_month_avg") or pts.get("last_quarter_avg") or 0) or None
 
-    grades     = ana.get("grades", {})
-    recent_raw = grades.get("recent_grades") or []
-
-    # Build price target lookup by analyst name from price-target endpoint
+    # Build analyst rows from price-target endpoint — has company + target natively
     target_list = target_raw if isinstance(target_raw, list) else []
-    target_by_analyst = {}
-    for t in target_list:
-        name = t.get("analystCompany") or t.get("company") or ""
-        pt   = t.get("priceTarget") or t.get("price_target") or None
-        if name and pt:
-            target_by_analyst[name] = float(pt)
-
     recent = []
-    for g in recent_raw[:5]:
-        company = g.get("company", "")
-        pt = target_by_analyst.get(company)
+    for t in target_list[:5]:
+        company = t.get("analystCompany") or t.get("company") or ""
+        pt      = t.get("priceTarget") or t.get("price_target") or None
+        grade   = t.get("newGrade") or t.get("grade") or ""
+        date    = (t.get("dateUpdated") or t.get("date") or "")[:10]
         recent.append({
             "company":     company,
-            "grade":       g.get("grade", ""),
-            "action":      g.get("action", ""),
-            "date":        g.get("date", ""),
-            "prevGrade":   g.get("prevGrade", ""),
-            "priceTarget": pt,
+            "grade":       grade,
+            "action":      "",         # price-target endpoint doesn't have upgrade/downgrade
+            "date":        date,
+            "prevGrade":   t.get("previousGrade") or t.get("prevGrade") or "",
+            "priceTarget": float(pt) if pt else None,
         })
 
     return no_cache({
