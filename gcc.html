@@ -675,7 +675,7 @@ function renderList(data) {
   const filter=(document.getElementById('search-input').value||'').toUpperCase();
   const filtered=watchlist.filter(t=>!filter||t.symbol.includes(filter)||(t.name||'').toUpperCase().includes(filter));
   document.getElementById('ticker-count').textContent=`${watchlist.length} ticker${watchlist.length!==1?'s':''}`;
-  if (!filtered.length) { const lookupVisible = document.getElementById('lookup-card').classList.contains('visible'); document.getElementById('ticker-list').innerHTML = lookupVisible ? '' : '<div style="text-align:center;padding:40px;color:var(--text3);font-size:13px">No tickers match.</div>'; return; }
+  const lookupVisible = document.getElementById('lookup-card').classList.contains('visible'); if (!filtered.length) { document.getElementById('ticker-list').innerHTML = lookupVisible ? '' : '<div style="text-align:center;padding:40px;color:var(--text3);font-size:13px">No tickers match.</div>'; return; }
   const grouped={};
   filtered.forEach(t=>{ const k=String(t.tier??'0'); if(!grouped[k])grouped[k]=[]; grouped[k].push(t); });
   let html='',first=true;
@@ -939,7 +939,7 @@ async function runLookup(symbol) {
     const dollarChg = parseFloat(q.change || 0);
     const pctChg    = parseFloat(q.changePct || 0);
     const chClass   = dollarChg >= 0 ? 'pos' : 'neg';
-    const chStr     = `${dollarChg >= 0 ? '+' : ''}$${Math.abs(dollarChg).toFixed(2)}  (${pctChg >= 0 ? '+' : ''}${pctChg.toFixed(2)}%)`;
+    const chStr     = `${dollarChg >= 0 ? '+' : ''}\$${Math.abs(dollarChg).toFixed(2)}  (${pctChg >= 0 ? '+' : ''}${parseFloat(pctChg).toFixed(2)}%)`;
     const yearHigh  = parseFloat(q.yearHigh || 0);
     const yearLow   = parseFloat(q.yearLow  || 0);
     const vol       = parseInt(q.volume || 0);
