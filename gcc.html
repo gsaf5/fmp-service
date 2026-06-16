@@ -675,7 +675,7 @@ function renderList(data) {
   const filter=(document.getElementById('search-input').value||'').toUpperCase();
   const filtered=watchlist.filter(t=>!filter||t.symbol.includes(filter)||(t.name||'').toUpperCase().includes(filter));
   document.getElementById('ticker-count').textContent=`${watchlist.length} ticker${watchlist.length!==1?'s':''}`;
-  if (!filtered.length) { document.getElementById('ticker-list').innerHTML='<div style="text-align:center;padding:40px;color:var(--text3);font-size:13px">No tickers match.</div>'; return; }
+  if (!filtered.length) { const lookupVisible = document.getElementById('lookup-card').classList.contains('visible'); document.getElementById('ticker-list').innerHTML = lookupVisible ? '' : '<div style="text-align:center;padding:40px;color:var(--text3);font-size:13px">No tickers match.</div>'; return; }
   const grouped={};
   filtered.forEach(t=>{ const k=String(t.tier??'0'); if(!grouped[k])grouped[k]=[]; grouped[k].push(t); });
   let html='',first=true;
@@ -937,13 +937,14 @@ async function runLookup(symbol) {
 
     const price  = parseFloat(q.price || 0);
     const change = parseFloat(q.changesPercentage || q.changePercent || 0);
+    const dollarChange = parseFloat(q.change || 0);
     const chClass = change >= 0 ? 'pos' : 'neg';
-    const chStr   = `${change >= 0 ? '+' : ''}${change.toFixed(2)}%`;
+    const chStr   = `${dollarChange >= 0 ? '+' : ''}$${Math.abs(dollarChange).toFixed(2)} (${change >= 0 ? '+' : ''}${change.toFixed(2)}%)`;
     const yearHigh = parseFloat(q.yearHigh || 0);
     const yearLow  = parseFloat(q.yearLow  || 0);
     const vol = parseInt(q.volume || 0);
     const cap = parseFloat(q.marketCap || 0);
-    const pe  = parseFloat(q.pe || 0);
+    const pe  = parseFloat(q.pe || q.forwardPE || q.priceEarningsRatio || 0);
     const apt = parseFloat(q.priceAvgTarget || q.analystTarget || 0);
 
     document.getElementById('lk-symbol').textContent = q.symbol || symbol;
@@ -959,18 +960,40 @@ async function runLookup(symbol) {
     document.getElementById('lk-target').textContent = apt ? `$${apt.toFixed(2)}` : 'Fetching…';
     document.getElementById('lk-rsi').textContent    = 'Fetching…';
 
-    // Fetch RSI from /conviction endpoint
+    // Fetch RSI + analyst target from /quote extended or /conviction
     try {
+      // Try analyst target from quote data first
+      const apt = parseFloat(q.priceAvgTarget || q.targetMeanPrice || q.analystPriceTarget || 0);
+      if (apt) document.getElementById('lk-target').textContent = `$${apt.toFixed(2)}`;
+
+      // Try RSI + analyst target from /conviction endpoint
       const cvRes = await fetch(`${API_BASE}/conviction?symbol=${symbol}`, { headers: {'x-api-key': API_KEY} });
       if (cvRes.ok) {
         const cv = await cvRes.json();
-        const rsi = cv.rsi || cv.RSI || cv.technicals?.rsi;
-        const pt  = cv.analystTarget || cv.priceTarget || cv.consensus_pt;
-        if (rsi) document.getElementById('lk-rsi').textContent = parseFloat(rsi).toFixed(1);
-        if (pt)  document.getElementById('lk-target').textContent = `$${parseFloat(pt).toFixed(2)}`;
+        console.log('[GCC] conviction keys:', Object.keys(cv).join(', '));
+        console.log('[GCC] conviction sample:', JSON.stringify(cv).slice(0,500));
+
+        // RSI — walk all possible paths
+        const rsiVal = cv.rsi ?? cv.RSI ?? cv.technical?.rsi ?? cv.technicals?.rsi ??
+                       cv.indicators?.rsi ?? cv.data?.rsi ?? cv.score_data?.rsi ??
+                       cv.metrics?.rsi ?? (Array.isArray(cv.rsi_data) ? cv.rsi_data[0]?.rsi : null);
+
+        // Analyst target — walk all possible paths
+        const ptVal  = cv.analystTarget ?? cv.priceTarget ?? cv.targetMeanPrice ??
+                       cv.consensus_pt ?? cv.price_target ?? cv.analyst_target ??
+                       cv.metrics?.analystTarget ?? cv.score_data?.priceTarget;
+
+        document.getElementById('lk-rsi').textContent = rsiVal != null ? parseFloat(rsiVal).toFixed(1) : '—';
+        if (ptVal != null && !apt) document.getElementById('lk-target').textContent = `$${parseFloat(ptVal).toFixed(2)}`;
+        else if (!apt) document.getElementById('lk-target').textContent = '—';
+      } else {
+        document.getElementById('lk-rsi').textContent = '—';
+        if (!apt) document.getElementById('lk-target').textContent = '—';
       }
     } catch(e) {
       document.getElementById('lk-rsi').textContent = '—';
+      document.getElementById('lk-target').textContent = '—';
+      console.warn('[GCC] RSI/target fetch error:', e.message);
     }
 
   } catch(e) {
