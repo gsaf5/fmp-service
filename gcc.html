@@ -482,10 +482,63 @@
   ::-webkit-scrollbar-track { background: transparent; }
   ::-webkit-scrollbar-thumb { background: var(--border2); border-radius: 2px; }
 
-  @media (max-width: 600px) {
+  @media (max-width: 768px) {
+    /* Header */
+    .header-title { display: none; }
+
+    /* Cron bar — smaller pills */
+    .cron-pill { font-size: 10px; padding: 4px 8px; gap: 4px; }
+
+    /* Toolbar */
+    .toolbar { flex-wrap: wrap; gap: 8px; padding: 10px 12px; }
+    .toolbar-left { flex-wrap: wrap; gap: 6px; }
+    .search-input { width: 100%; }
+    .toolbar-btn { font-size: 11px; padding: 7px 10px; flex: 1; justify-content: center; }
+    .last-refresh { width: 100%; text-align: right; font-size: 10px; }
+
+    /* Watchlist padding */
+    .watchlist { padding: 0 12px 24px; }
+
+    /* Ticker card — stack vertically */
+    .ticker-card {
+      flex-wrap: wrap;
+      gap: 8px;
+      padding: 12px;
+      align-items: flex-start;
+    }
+
+    /* Row 1: symbol+price fills width, zone badge right-aligned */
+    .ticker-meta { flex: 1; min-width: 0; }
+    .ticker-symbol { font-size: 15px; }
+
+    /* Hide zone range on mobile — too wide */
     .ticker-zone-range { display: none; }
-    .ticker-name { display: none; }
-    .zone-block { min-width: 80px; }
+
+    /* Zone badge + distance */
+    .zone-block { min-width: 0; flex: 0 0 auto; }
+    .zone-badge { font-size: 9px; padding: 3px 8px; min-width: 70px; }
+    .zone-from { font-size: 9px; }
+
+    /* Actions row — full width at bottom */
+    .ticker-actions {
+      width: 100%;
+      justify-content: flex-end;
+      gap: 6px;
+      border-top: 1px solid var(--border);
+      padding-top: 8px;
+      margin-top: 2px;
+    }
+
+    .action-btn { font-size: 11px; padding: 6px 12px; }
+    .action-btn.conviction { flex: 1; text-align: center; justify-content: center; }
+
+    /* Modal full width */
+    .modal { width: calc(100vw - 24px); padding: 18px; }
+    .modal-row { grid-template-columns: 1fr 1fr; }
+
+    /* PIN keypad bigger on mobile */
+    .pin-key { height: 80px; font-size: 26px; }
+    .pin-keypad { grid-template-columns: repeat(3, 88px); gap: 10px; }
   }
 </style>
 </head>
@@ -1018,4 +1071,3 @@ function initDashboard() {
 </script>
 </body>
 </html>
-
