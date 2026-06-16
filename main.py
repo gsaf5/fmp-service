@@ -135,7 +135,7 @@ async def fetch_watchlist_data():
 # ── Routes ────────────────────────────────────────────────────────────────────
 @app.get("/ping")
 async def ping():
-    return {"status": "ok", "service": "Claude Market API v5.2",
+    return {"status": "ok", "service": "Claude Market API v5.3",
             "ts": datetime.utcnow().isoformat()}
 
 @app.get("/")
@@ -1982,16 +1982,17 @@ async def history_analyze(
     )
     all_touches.sort(key=lambda x: x["date"])
 
-    round_trips = 0
+    # Count round trips: each time direction changes floor→ceiling or ceiling→floor
+    # counts as half a round trip. Two direction changes = one full round trip.
+    # This correctly handles clustered touches (e.g. 4 floors then 10 ceilings = 1 RT)
+    # as well as interleaved touches (floor ceiling floor ceiling = 2 RTs)
+    direction_changes = 0
     last_type = None
     for touch in all_touches:
-        if last_type and touch["type"] != last_type:
-            if touch["type"] == "floor":  # completed ceiling→floor = half trip
-                round_trips += 0.5
-            else:                          # completed floor→ceiling = half trip
-                round_trips += 0.5
+        if last_type is not None and touch["type"] != last_type:
+            direction_changes += 1
         last_type = touch["type"]
-    round_trips = int(round_trips)  # full round trips only
+    round_trips = direction_changes // 2  # 2 direction changes = 1 full round trip
 
     # ── GATE 1 SCORING ────────────────────────────────────────────────────────
     floor_count   = len(floor_touches)
