@@ -99,6 +99,7 @@
   .nav-tab.active.watchlist { background: var(--blue-dim); color: var(--blue); border-color: rgba(96,165,250,0.35); }
   .nav-tab.active.discovery { background: var(--yellow-dim); color: var(--yellow); border-color: rgba(250,204,21,0.35); }
   .nav-tab.active.conviction { background: var(--surface2); color: var(--text); border-color: var(--border2); }
+  .nav-tab.active.range { background: var(--green-dim); color: var(--green); border-color: rgba(52,211,153,0.35); }
 
   .header-right { display: flex; align-items: center; gap: 10px; flex-shrink: 0; }
   .market-status { display: flex; align-items: center; gap: 6px; font-size: 11px; color: var(--text2); font-family: var(--font); }
@@ -258,6 +259,45 @@
   .toast.error   { border-color: rgba(248,113,113,0.45); color: var(--red); }
   .toast.success { border-color: rgba(52,211,153,0.4);   color: var(--green); }
 
+
+  /* Ticker lookup card */
+  .lookup-card {
+    background: var(--surface); border: 1px solid var(--blue);
+    border-radius: 12px; padding: 16px; margin-bottom: 12px;
+    display: none; position: relative;
+  }
+  .lookup-card.visible { display: block; }
+  .lookup-header { display: flex; align-items: flex-start; justify-content: space-between; gap: 12px; flex-wrap: wrap; margin-bottom: 12px; }
+  .lookup-symbol { font-family: var(--font); font-size: 20px; font-weight: 700; color: var(--text); }
+  .lookup-price  { font-family: var(--font); font-size: 20px; font-weight: 600; color: var(--text); }
+  .lookup-change.pos { color: var(--green); font-family: var(--font); font-size: 13px; }
+  .lookup-change.neg { color: var(--red);   font-family: var(--font); font-size: 13px; }
+  .lookup-grid { display: grid; grid-template-columns: repeat(3, 1fr); gap: 8px; margin-bottom: 12px; }
+  .lookup-metric { background: var(--surface2); border-radius: 8px; padding: 8px 10px; }
+  .lookup-metric-label { font-size: 10px; color: var(--text3); text-transform: uppercase; letter-spacing: 0.06em; font-family: var(--font); margin-bottom: 3px; }
+  .lookup-metric-value { font-size: 13px; font-family: var(--font); color: var(--text); font-weight: 500; }
+  .lookup-actions { display: flex; gap: 8px; flex-wrap: wrap; }
+  .lookup-close { position: absolute; top: 10px; right: 12px; background: none; border: none; color: var(--text3); cursor: pointer; font-size: 16px; padding: 2px 6px; }
+  .lookup-close:hover { color: var(--text); }
+  @media (max-width: 768px) { .lookup-grid { grid-template-columns: repeat(2, 1fr); } }
+
+  /* Discovery add chips */
+  .disc-add-row { margin-top: 14px; padding-top: 12px; border-top: 1px solid var(--border); display: none; }
+  .disc-add-row.visible { display: block; }
+  .disc-add-label { font-size: 11px; color: var(--text3); font-family: var(--font); margin-bottom: 8px; text-transform: uppercase; letter-spacing: 0.06em; }
+  .disc-chips { display: flex; gap: 8px; flex-wrap: wrap; }
+  .disc-chip {
+    padding: 6px 14px; border-radius: 20px; font-size: 12px; font-family: var(--font);
+    font-weight: 600; background: var(--green-dim); border: 1px solid rgba(52,211,153,0.35);
+    color: var(--green); cursor: pointer; transition: all 0.1s;
+  }
+  .disc-chip:hover { background: rgba(52,211,153,0.22); }
+  .disc-chip:disabled { opacity: 0.5; cursor: not-allowed; }
+
+  /* Conviction add button */
+  .conv-add-row { margin-top: 14px; padding-top: 12px; border-top: 1px solid var(--border); display: none; }
+  .conv-add-row.visible { display: block; }
+
   /* Scrollbar */
   ::-webkit-scrollbar { width: 4px; }
   ::-webkit-scrollbar-track { background: transparent; }
@@ -318,11 +358,12 @@
   <!-- Header with top nav -->
   <div class="header">
     <div class="header-left">
-      <div class="header-logo">GCC</div>
+      <div class="header-logo" onclick="switchTab('watchlist')" style="cursor:pointer" title="Home">GCC</div>
       <nav class="nav-tabs">
         <button class="nav-tab watchlist active" onclick="switchTab('watchlist')">📊 Watchlist</button>
         <button class="nav-tab discovery" onclick="switchTab('discovery')">🔍 Discovery</button>
         <button class="nav-tab conviction" onclick="switchTab('conviction')">⚡ Conviction</button>
+        <button class="nav-tab range" onclick="switchTab('range')">📈 Range</button>
       </nav>
     </div>
     <div class="header-right">
@@ -347,7 +388,7 @@
   <div class="section watchlist active" id="section-watchlist">
     <div class="toolbar">
       <div class="toolbar-left">
-        <input class="search-input" id="search-input" type="text" placeholder="Filter tickers…" oninput="filterTickers()" />
+        <input class="search-input" id="search-input" type="text" placeholder="Filter or look up ticker…" oninput="filterTickers()" onkeydown="handleSearchKey(event)" />
         <button class="toolbar-btn" onclick="refreshAll()">↺ Refresh</button>
         <button class="toolbar-btn primary" onclick="openAddModal()">+ Add</button>
       </div>
@@ -357,6 +398,31 @@
       <div class="section-header">
         <div class="section-label">Watchlist</div>
         <div class="ticker-count" id="ticker-count">—</div>
+      </div>
+      <div class="lookup-card" id="lookup-card">
+        <button class="lookup-close" onclick="closeLookup()">✕</button>
+        <div class="lookup-header">
+          <div>
+            <div class="lookup-symbol" id="lk-symbol">—</div>
+            <div id="lk-name" style="font-size:12px;color:var(--text3);margin-top:2px"></div>
+          </div>
+          <div style="text-align:right">
+            <div class="lookup-price" id="lk-price">—</div>
+            <div class="lookup-change" id="lk-change"></div>
+          </div>
+        </div>
+        <div class="lookup-grid">
+          <div class="lookup-metric"><div class="lookup-metric-label">52wk Range</div><div class="lookup-metric-value" id="lk-range">—</div></div>
+          <div class="lookup-metric"><div class="lookup-metric-label">RSI (14)</div><div class="lookup-metric-value" id="lk-rsi">—</div></div>
+          <div class="lookup-metric"><div class="lookup-metric-label">Analyst Target</div><div class="lookup-metric-value" id="lk-target">—</div></div>
+          <div class="lookup-metric"><div class="lookup-metric-label">Volume</div><div class="lookup-metric-value" id="lk-vol">—</div></div>
+          <div class="lookup-metric"><div class="lookup-metric-label">Mkt Cap</div><div class="lookup-metric-value" id="lk-cap">—</div></div>
+          <div class="lookup-metric"><div class="lookup-metric-label">P/E (Fwd)</div><div class="lookup-metric-value" id="lk-pe">—</div></div>
+        </div>
+        <div class="lookup-actions">
+          <button class="run-btn conviction-run" style="padding:7px 14px;font-size:12px" onclick="lookupConviction()">⚡ Run Conviction</button>
+          <button class="toolbar-btn primary" style="font-size:12px" onclick="lookupAdd()">+ Add to Watchlist</button>
+        </div>
       </div>
       <div id="ticker-list"></div>
     </div>
@@ -375,6 +441,10 @@
       <hr class="ai-divider">
       <div class="ai-status" id="disc-status"></div>
       <div class="ai-output empty" id="disc-output">Click Run Discovery — opens Claude with your full discovery skill pre-loaded.</div>
+      <div class="disc-add-row" id="disc-add-row">
+        <div class="disc-add-label">Active buys from this scan — add to watchlist:</div>
+        <div class="disc-chips" id="disc-chips"></div>
+      </div>
     </div>
   </div>
 
@@ -398,6 +468,36 @@
       <hr class="ai-divider">
       <div class="ai-status" id="conv-status"></div>
       <div class="ai-output empty" id="conv-output">Enter a ticker and tap Run Conviction — opens Claude pre-filled with live price and your zone data.</div>
+      <div class="conv-add-row" id="conv-add-row">
+        <button class="run-btn conviction-run" style="width:100%;font-size:13px" onclick="convAdd()">+ Add to Watchlist</button>
+      </div>
+    </div>
+  </div>
+
+
+  <!-- ── RANGE TRADER SECTION ── -->
+  <div class="section" id="section-range">
+    <div class="ai-section">
+      <div class="ai-header">
+        <div>
+          <div class="ai-title">Range Trader</div>
+          <div class="ai-subtitle">Finds stocks in confirmed ranges with 3+ touches.<br>All 7 range gates applied. Only clean setups surface.</div>
+        </div>
+        <button class="run-btn" id="range-btn" onclick="runRange()" style="background:var(--green);color:#0f1117;font-weight:600">Run Range Scan ↗</button>
+      </div>
+      <div style="margin-top:10px">
+        <div class="ai-subtitle" style="margin-bottom:6px">Or score a specific ticker:</div>
+        <div class="ticker-input-row">
+          <input class="ticker-input" id="range-ticker" type="text" placeholder="Ticker" maxlength="6" />
+          <button class="run-btn conviction-run" id="range-single-btn" onclick="runRangeSingle()">Score Range ↗</button>
+        </div>
+      </div>
+      <hr class="ai-divider">
+      <div class="ai-status" id="range-status"></div>
+      <div class="ai-output empty" id="range-output">Run a scan or enter a ticker to score its range setup.</div>
+      <div class="conv-add-row" id="range-add-row">
+        <button class="run-btn conviction-run" style="width:100%;font-size:13px" onclick="rangeAdd()">+ Add to Watchlist</button>
+      </div>
     </div>
   </div>
 
@@ -514,6 +614,7 @@ function switchTab(tab) {
   document.getElementById(`section-${tab}`).classList.add('active');
   document.getElementById('cron-bar').style.display = tab === 'watchlist' ? 'flex' : 'none';
   if (tab === 'conviction') buildQuickPicks();
+  if (tab === 'range') buildRangeQuickPicks();
 }
 
 // ══ MARKET / CRON ════════════════════════════════════════════════════
@@ -764,6 +865,7 @@ OUTPUT FORMAT:
 
 // ══ DISCOVERY ════════════════════════════════════════════════════════
 async function runDiscovery() {
+  document.getElementById('disc-add-row').classList.remove('visible');
   const today = new Date().toLocaleDateString('en-US',{weekday:'long',year:'numeric',month:'long',day:'numeric'});
   await callClaude(
     DISC_SYSTEM,
@@ -773,12 +875,16 @@ async function runDiscovery() {
     document.getElementById('disc-btn'),
     'Run Discovery ↗'
   );
+  const text = document.getElementById('disc-output').textContent;
+  showDiscChips(text);
 }
 
 // ══ CONVICTION ═══════════════════════════════════════════════════════
 async function runConviction() {
   const ticker = (document.getElementById('conv-ticker').value||'').trim().toUpperCase();
   if (!ticker) { showToast('Enter a ticker first','error'); return; }
+  lastConvTicker = ticker;
+  document.getElementById('conv-add-row').classList.remove('visible');
   const pd = priceCache[ticker];
   const priceNote = pd ? ` Current price: $${pd.price.toFixed(2)}.` : '';
   const wl = watchlist.find(t=>t.symbol===ticker);
@@ -791,7 +897,336 @@ async function runConviction() {
     document.getElementById('conv-btn'),
     'Run Conviction ↗'
   );
+  lastConvText = document.getElementById('conv-output').textContent;
+  document.getElementById('conv-add-row').classList.add('visible');
 }
+
+
+// ══ TICKER LOOKUP ════════════════════════════════════════════════════
+let lookupData = null;
+let lookupSymbol = '';
+
+function handleSearchKey(e) {
+  if (e.key !== 'Enter') return;
+  const val = (e.target.value || '').trim().toUpperCase();
+  if (!val) return;
+  // If it's in the watchlist, just filter. If not, do a lookup.
+  if (!watchlist.find(t => t.symbol === val)) {
+    runLookup(val);
+  }
+}
+
+async function runLookup(symbol) {
+  lookupSymbol = symbol;
+  const card = document.getElementById('lookup-card');
+  card.classList.add('visible');
+  document.getElementById('lk-symbol').textContent = symbol;
+  document.getElementById('lk-name').textContent = '';
+  document.getElementById('lk-price').textContent = '···';
+  document.getElementById('lk-change').textContent = '';
+  ['lk-range','lk-rsi','lk-target','lk-vol','lk-cap','lk-pe'].forEach(id => {
+    document.getElementById(id).textContent = '···';
+  });
+
+  try {
+    const res = await fetch(`${API_BASE}/quote?symbols=${symbol}`, { headers: {'x-api-key': API_KEY} });
+    const raw = await res.json();
+    const arr = Array.isArray(raw) ? raw : (raw.data || [raw]);
+    const q = arr[0] || {};
+    lookupData = q;
+
+    const price  = parseFloat(q.price || 0);
+    const change = parseFloat(q.changesPercentage || q.changePercent || 0);
+    const chClass = change >= 0 ? 'pos' : 'neg';
+    const chStr   = `${change >= 0 ? '+' : ''}${change.toFixed(2)}%`;
+    const yearHigh = parseFloat(q.yearHigh || 0);
+    const yearLow  = parseFloat(q.yearLow  || 0);
+    const vol = parseInt(q.volume || 0);
+    const cap = parseFloat(q.marketCap || 0);
+    const pe  = parseFloat(q.pe || 0);
+    const apt = parseFloat(q.priceAvgTarget || q.analystTarget || 0);
+
+    document.getElementById('lk-symbol').textContent = q.symbol || symbol;
+    document.getElementById('lk-name').textContent   = q.name || '';
+    document.getElementById('lk-price').textContent  = price ? `$${price.toFixed(2)}` : '—';
+    const chEl = document.getElementById('lk-change');
+    chEl.textContent  = chStr;
+    chEl.className    = `lookup-change ${chClass}`;
+    document.getElementById('lk-range').textContent  = (yearLow && yearHigh) ? `$${yearLow.toFixed(2)} – $${yearHigh.toFixed(2)}` : '—';
+    document.getElementById('lk-vol').textContent    = vol ? (vol > 1e6 ? `${(vol/1e6).toFixed(1)}M` : `${(vol/1000).toFixed(0)}K`) : '—';
+    document.getElementById('lk-cap').textContent    = cap ? (cap > 1e9 ? `$${(cap/1e9).toFixed(1)}B` : `$${(cap/1e6).toFixed(0)}M`) : '—';
+    document.getElementById('lk-pe').textContent     = pe ? pe.toFixed(1) : '—';
+    document.getElementById('lk-target').textContent = apt ? `$${apt.toFixed(2)}` : 'Fetching…';
+    document.getElementById('lk-rsi').textContent    = 'Fetching…';
+
+    // Fetch RSI from /conviction endpoint
+    try {
+      const cvRes = await fetch(`${API_BASE}/conviction?symbol=${symbol}`, { headers: {'x-api-key': API_KEY} });
+      if (cvRes.ok) {
+        const cv = await cvRes.json();
+        const rsi = cv.rsi || cv.RSI || cv.technicals?.rsi;
+        const pt  = cv.analystTarget || cv.priceTarget || cv.consensus_pt;
+        if (rsi) document.getElementById('lk-rsi').textContent = parseFloat(rsi).toFixed(1);
+        if (pt)  document.getElementById('lk-target').textContent = `$${parseFloat(pt).toFixed(2)}`;
+      }
+    } catch(e) {
+      document.getElementById('lk-rsi').textContent = '—';
+    }
+
+  } catch(e) {
+    document.getElementById('lk-price').textContent = 'Error';
+    showToast('Lookup failed: ' + e.message, 'error');
+  }
+}
+
+function closeLookup() {
+  document.getElementById('lookup-card').classList.remove('visible');
+  lookupData = null; lookupSymbol = '';
+  document.getElementById('search-input').value = '';
+  filterTickers();
+}
+
+function lookupConviction() {
+  if (!lookupSymbol) return;
+  document.getElementById('conv-ticker').value = lookupSymbol;
+  switchTab('conviction');
+  setTimeout(() => runConviction(), 100);
+}
+
+function lookupAdd() {
+  if (!lookupSymbol) return;
+  prefillModal(lookupSymbol, lookupData?.name || '', 0, 0, 0, 0, 0);
+}
+
+// ══ MODAL PREFILL HELPER ═════════════════════════════════════════════
+function prefillModal(symbol, name, tier, zoneLow, zoneHigh, stop, target1) {
+  document.getElementById('m-symbol').value   = symbol;
+  document.getElementById('m-name').value     = name;
+  document.getElementById('m-tier').value     = String(tier || 1);
+  document.getElementById('m-zone-low').value  = zoneLow  || '';
+  document.getElementById('m-zone-high').value = zoneHigh || '';
+  document.getElementById('m-stop').value      = stop     || '';
+  document.getElementById('m-target1').value   = target1  || '';
+  document.getElementById('modal-overlay').classList.add('visible');
+}
+
+// ══ DISCOVERY → PARSE ACTIVE BUYS ════════════════════════════════════
+function parseDiscoveryBuys(text) {
+  // Look for tickers explicitly marked as active buys (not Watch/Monitor/Kill)
+  const lines = text.split('\n');
+  const buys = [];
+  const ticker_re = /\b([A-Z]{2,6})\b/g;
+  let inKill = false;
+  lines.forEach(line => {
+    const upper = line.toUpperCase();
+    // Skip kill/watch sections
+    if (upper.includes('KILLED') || upper.includes('WATCH:') || upper.includes('MONITOR') || upper.includes('DOWNGRADE')) {
+      inKill = true; return;
+    }
+    if (upper.includes('SURVIVOR') || upper.includes('VERDICT') || upper.includes('ACTIVE BUY') || upper.match(/^###\s+SURVIVOR/)) {
+      inKill = false;
+    }
+    if (inKill) return;
+    // Only add tickers from lines that suggest active recommendation
+    if (upper.includes('TIER 1') || upper.includes('TIER 2') || upper.includes('ACTIVE BUY') || upper.includes('STRONG BUY') || upper.includes('BUY NOW')) {
+      const matches = line.match(ticker_re) || [];
+      matches.forEach(t => {
+        if (t.length >= 2 && t.length <= 6 && !buys.includes(t) && !['THE','AND','FOR','NOT','BUT','ALL','YTD'].includes(t)) {
+          buys.push(t);
+        }
+      });
+    }
+  });
+  return [...new Set(buys)].slice(0, 5);
+}
+
+let discActiveBuys = [];
+
+function showDiscChips(text) {
+  discActiveBuys = parseDiscoveryBuys(text);
+  const row = document.getElementById('disc-add-row');
+  const chips = document.getElementById('disc-chips');
+  if (!discActiveBuys.length) { row.classList.remove('visible'); return; }
+  chips.innerHTML = discActiveBuys.map(t =>
+    `<button class="disc-chip" id="disc-chip-${t}" onclick="addFromDiscovery('${t}')">+ ${t}</button>`
+  ).join('');
+  row.classList.add('visible');
+}
+
+async function addFromDiscovery(symbol) {
+  const btn = document.getElementById(`disc-chip-${symbol}`);
+  if (btn) { btn.disabled = true; btn.textContent = `${symbol} …`; }
+  // Quick conviction call to get levels
+  showToast(`Getting levels for ${symbol}…`);
+  const pd = priceCache[symbol];
+  const priceNote = pd ? ` Current price: $${pd.price.toFixed(2)}.` : '';
+  try {
+    const startRes = await fetch(`${API_BASE}/claude`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json', 'x-api-key': API_KEY },
+      body: JSON.stringify({
+        system: 'You are a trading assistant. Given a stock ticker, return ONLY a JSON object with these fields: {"name":"Company Name","tier":1,"zoneLow":0.00,"zoneHigh":0.00,"stop":0.00,"target1":0.00}. Use current live data. Tier 1 for Roth/aggressive, Tier 2 for taxable/steady. Return ONLY the JSON, no other text.',
+        message: `Return entry zone, stop, and target1 for ${symbol}.${priceNote} JSON only.`,
+        max_tokens: 200
+      })
+    });
+    const { job_id } = await startRes.json();
+    // Poll
+    let result = null;
+    for (let i = 0; i < 20; i++) {
+      await new Promise(r => setTimeout(r, 3000));
+      const pollRes = await fetch(`${API_BASE}/claude/result/${job_id}`, { headers: {'x-api-key': API_KEY} });
+      const job = await pollRes.json();
+      if (job.status === 'done') { result = job.text; break; }
+      if (job.status === 'error') throw new Error(job.text);
+    }
+    if (!result) throw new Error('Timeout');
+    // Parse JSON from result
+    const jsonMatch = result.match(/\{[^}]+\}/s);
+    const levels = jsonMatch ? JSON.parse(jsonMatch[0]) : {};
+    prefillModal(
+      symbol,
+      levels.name || '',
+      levels.tier || 1,
+      levels.zoneLow || 0,
+      levels.zoneHigh || 0,
+      levels.stop || 0,
+      levels.target1 || 0
+    );
+    if (btn) { btn.textContent = `+ ${symbol}`; btn.disabled = false; }
+  } catch(e) {
+    showToast(`${symbol}: ${e.message}`, 'error');
+    if (btn) { btn.textContent = `+ ${symbol}`; btn.disabled = false; }
+  }
+}
+
+// ══ CONVICTION → ADD TO WATCHLIST ════════════════════════════════════
+let lastConvTicker = '';
+let lastConvText   = '';
+
+function parseConvLevels(symbol, text) {
+  // Pull levels from conviction output text
+  const getNum = (patterns) => {
+    for (const p of patterns) {
+      const m = text.match(p);
+      if (m) return parseFloat(m[1].replace(/,/g,''));
+    }
+    return 0;
+  };
+  const tier = text.includes('Tier 1') || text.includes('TIER 1') || text.includes('Roth') ? 1 : 2;
+  const zoneLow  = getNum([/Entry.*?\$([\d.]+)/i, /Zone.*?\$([\d.]+)/i, /entry.*?([\d.]+)/i]);
+  const zoneHigh = getNum([/[-–]\s*\$([\d.]+).*?zone/i, /Zone.*?[-–]\s*\$([\d.]+)/i, /[Zz]one\s+(?:High|Upper).*?\$([\d.]+)/i]);
+  const stop     = getNum([/Stop.*?\$([\d.]+)/i, /stop.*?([\d.]+)/i]);
+  const target1  = getNum([/Target\s*1.*?\$([\d.]+)/i, /T1.*?\$([\d.]+)/i]);
+  return { tier, zoneLow, zoneHigh, stop, target1 };
+}
+
+function convAdd() {
+  if (!lastConvTicker) { showToast('Run conviction first', 'error'); return; }
+  const levels = parseConvLevels(lastConvTicker, lastConvText);
+  prefillModal(lastConvTicker, '', levels.tier, levels.zoneLow, levels.zoneHigh, levels.stop, levels.target1);
+}
+
+// ══ RANGE TRADER ═════════════════════════════════════════════════════
+const RANGE_SYSTEM = `You are Gary's Range Trader scanner. Find stocks trading in confirmed technical ranges with 3+ touches on both support and resistance.
+
+RANGE CRITERIA — all must be present:
+1. Confirmed range with minimum 3 touches on support AND 3 touches on resistance
+2. Range width: minimum 8%, maximum 35% (too tight = noise, too wide = trend)
+3. Range duration: minimum 6 weeks established
+4. Volume confirmation: declining volume inside range, expanding on touches
+5. No major earnings within 2 weeks (binary event kills the range)
+6. RSI oscillating between 35-65 inside the range (not trending)
+7. No overhead shelf supply that would cap a breakout within the range
+
+VETTING GATES (kill any name that fails):
+1. Insider Gate: no net insider selling >40% in 60 days
+2. Balance Sheet: current ratio >1.0, no going concern
+3. Dilution Gate: no active ATM or shelf registration >10% of float
+4. Legal Gate: no active class action or SEC investigation
+5. Liquidity Gate: minimum 200K avg daily volume
+6. Catalyst Gate: no pending binary event (FDA, merger vote, earnings <2 weeks)
+7. Trend Gate: stock must be in a secular uptrend or sideways — no stocks in confirmed downtrends
+
+OUTPUT for each surviving name:
+- Ticker, company, theme
+- Range: support level, resistance level, range width %
+- Touch count (support touches / resistance touches)
+- Entry: buy near support with exact zone
+- Stop: just below support (-3% from support)
+- Target: resistance level
+- RSI current reading
+- Risk/reward ratio
+- Tier placement
+
+Be direct. No filler. Gary trades these setups intraday or swing.`;
+
+function buildRangeQuickPicks() {
+  // Reuse watchlist chips for range
+  const chips = watchlist.slice(0,12).map(t =>
+    `<button class="quick-chip" onclick="pickRangeTicker('${t.symbol}')">${t.symbol}</button>`
+  ).join('');
+  const el = document.getElementById('range-quick-picks');
+  if (el) el.innerHTML = chips;
+}
+
+function pickRangeTicker(symbol) {
+  document.getElementById('range-ticker').value = symbol;
+  document.getElementById('range-ticker').focus();
+}
+
+let lastRangeTicker = '';
+let lastRangeText   = '';
+
+async function runRange() {
+  const today = new Date().toLocaleDateString('en-US',{weekday:'long',year:'numeric',month:'long',day:'numeric'});
+  await callClaude(
+    RANGE_SYSTEM,
+    `Run range trader scan for ${today}. Find stocks in confirmed ranges with 3+ support and resistance touches. Apply all 7 vetting gates. Surface only clean setups with good risk/reward.`,
+    document.getElementById('range-output'),
+    document.getElementById('range-status'),
+    document.getElementById('range-btn'),
+    'Run Range Scan ↗'
+  );
+  const text = document.getElementById('range-output').textContent;
+  lastRangeText = text;
+  showRangeAdd(text);
+}
+
+async function runRangeSingle() {
+  const ticker = (document.getElementById('range-ticker').value||'').trim().toUpperCase();
+  if (!ticker) { showToast('Enter a ticker first','error'); return; }
+  lastRangeTicker = ticker;
+  const pd = priceCache[ticker];
+  const priceNote = pd ? ` Current price: $${pd.price.toFixed(2)}.` : '';
+  const wl = watchlist.find(t => t.symbol === ticker);
+  const zoneNote = wl?.zoneLow ? ` Known zone: $${wl.zoneLow}–$${wl.zoneHigh}.` : '';
+  await callClaude(
+    RANGE_SYSTEM,
+    `Score the range setup for ${ticker}.${priceNote}${zoneNote} Is it in a confirmed range? Apply all 7 vetting gates. Give exact entry, stop, target, and risk/reward.`,
+    document.getElementById('range-output'),
+    document.getElementById('range-status'),
+    document.getElementById('range-single-btn'),
+    'Score Range ↗'
+  );
+  const text = document.getElementById('range-output').textContent;
+  lastRangeText = text; lastRangeTicker = ticker;
+  document.getElementById('range-add-row').classList.add('visible');
+}
+
+function showRangeAdd(text) {
+  if (text && text.length > 100) {
+    document.getElementById('range-add-row').classList.add('visible');
+  }
+}
+
+function rangeAdd() {
+  const ticker = lastRangeTicker || (document.getElementById('range-ticker').value||'').trim().toUpperCase();
+  if (!ticker) { showToast('No ticker to add','error'); return; }
+  const levels = parseConvLevels(ticker, lastRangeText);
+  prefillModal(ticker, '', levels.tier, levels.zoneLow, levels.zoneHigh, levels.stop, levels.target1);
+}
+
 
 // ══ TOAST ════════════════════════════════════════════════════════════
 let toastTimer;
