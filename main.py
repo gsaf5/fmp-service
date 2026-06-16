@@ -2434,7 +2434,7 @@ async def claude_test():
     key = os.environ.get("ANTHROPIC_API_KEY", "")
     return {"key_loaded": bool(key), "key_prefix": key[:12] + "..." if key else "MISSING"}
 
-# ── Stock Lookup Endpoint v3 ───────────────────────────────────────────────────
+# ── Stock Lookup Endpoint v4 ───────────────────────────────────────────────────
 # REPLACE the existing /lookup endpoint in main.py with this.
 
 @app.get("/lookup", dependencies=[Depends(verify_key)])
@@ -2445,35 +2445,49 @@ async def stock_lookup(symbol: str = Query(...)):
         rsi_task     = fmp(client, "technical-indicators/rsi", {"symbol": sym, "periodLength": 14, "timeframe": "1day"})
         target_task  = fmp(client, "price-target-consensus", {"symbol": sym})
         profile_task = fmp(client, "profile", {"symbol": sym})
+        ytd_task     = fmp(client, "stock-price-change", {"symbol": sym})
 
-        quote_raw, rsi_raw, target_raw, profile_raw = await asyncio.gather(
-            quote_task, rsi_task, target_task, profile_task
+        quote_raw, rsi_raw, target_raw, profile_raw, ytd_raw = await asyncio.gather(
+            quote_task, rsi_task, target_task, profile_task, ytd_task
         )
 
     q   = first(quote_raw)
     tgt = first(target_raw)
     pro = first(profile_raw)
+    ytd = first(ytd_raw)
 
-    # RSI — new stable endpoint returns list with "rsi" field
+    # RSI
     rsi_val = None
     if isinstance(rsi_raw, list) and rsi_raw:
         rsi_val = rsi_raw[0].get("rsi") or rsi_raw[0].get("value")
     elif isinstance(rsi_raw, dict):
         rsi_val = rsi_raw.get("rsi") or rsi_raw.get("value")
 
-    # P/E — try multiple sources
-    pe_val = (q.get("pe") or q.get("priceEarningsRatio") or
-              pro.get("pe") or pro.get("priceEarningsRatio") or 0)
-
-    # % change — calculate if 0
-    price     = float(q.get("price") or 0)
-    change    = float(q.get("change") or 0)
-    prev      = price - change if price and change else 0
+    # Price / change
+    price      = float(q.get("price") or 0)
+    change     = float(q.get("change") or 0)
+    prev       = price - change if price and change else 0
     change_pct = round(change / prev * 100, 2) if prev else float(q.get("changesPercentage") or 0)
 
     # Analyst target
     apt = (tgt.get("targetConsensus") or tgt.get("priceTarget") or
            tgt.get("targetMedian") or q.get("priceAvgTarget") or None)
+
+    # YTD %
+    ytd_pct = (ytd.get("ytd") or ytd.get("YTD") or ytd.get("1Y") or None) if isinstance(ytd, dict) else None
+
+    # Beta
+    beta = pro.get("beta") or q.get("beta") or None
+
+    # Dividend yield
+    div_yield = pro.get("lastDiv") or q.get("lastAnnualDividend") or None
+    div_pct   = round((float(div_yield) / price * 100), 2) if div_yield and price else None
+
+    # Avg volume (10d) from quote
+    avg_vol = q.get("avgVolume") or q.get("averageVolume") or None
+
+    # EPS TTM
+    eps = q.get("eps") or pro.get("eps") or None
 
     return no_cache({
         "symbol":        q.get("symbol", sym),
@@ -2484,8 +2498,12 @@ async def stock_lookup(symbol: str = Query(...)):
         "yearHigh":      float(q.get("yearHigh") or 0),
         "yearLow":       float(q.get("yearLow") or 0),
         "volume":        int(q.get("volume") or 0),
+        "avgVolume":     int(avg_vol) if avg_vol else None,
         "marketCap":     float(q.get("marketCap") or 0),
-        "pe":            float(pe_val) if pe_val else None,
         "rsi":           float(rsi_val) if rsi_val is not None else None,
         "analystTarget": float(apt) if apt is not None else None,
+        "ytdPct":        float(ytd_pct) if ytd_pct is not None else None,
+        "beta":          float(beta) if beta is not None else None,
+        "divYieldPct":   div_pct,
+        "eps":           float(eps) if eps is not None else None,
     })
