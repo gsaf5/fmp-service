@@ -648,23 +648,124 @@ function buildQuickPicks() {
 }
 function pickTicker(symbol) { document.getElementById('conv-ticker').value = symbol; document.getElementById('conv-ticker').focus(); }
 
+// ══ CLAUDE PROXY CALL ════════════════════════════════════════════════
+async function callClaude(system, message, outputEl, statusEl, btnEl, btnText) {
+  outputEl.classList.remove('empty');
+  outputEl.textContent = '';
+  statusEl.innerHTML = '<span class="spinner"></span> Running…';
+  btnEl.disabled = true;
+  btnEl.textContent = '…';
+
+  try {
+    const res = await fetch(`${API_BASE}/claude`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json', 'x-api-key': API_KEY },
+      body: JSON.stringify({ system, message, max_tokens: 2000 })
+    });
+    if (!res.ok) throw new Error('HTTP ' + res.status);
+    const data = await res.json();
+    outputEl.textContent = data.text || 'No response received.';
+    statusEl.innerHTML = '✓ Done';
+    setTimeout(() => { statusEl.innerHTML = ''; }, 3000);
+  } catch(e) {
+    outputEl.textContent = 'Error: ' + e.message;
+    outputEl.classList.add('empty');
+    statusEl.innerHTML = '';
+    showToast('Error: ' + e.message, 'error');
+  } finally {
+    btnEl.disabled = false;
+    btnEl.textContent = btnText;
+  }
+}
+
+// ══ DISCOVERY SYSTEM PROMPT ═══════════════════════════════════════════
+const DISC_SYSTEM = `You are Gary's supply chain discovery engine. Gary is a self-directed investor.
+
+HARD FILTERS — every name must pass ALL:
+- YTD return under 40%
+- Under 8 analysts covering
+- Under $3B market cap preferred
+- Lagging headline theme by 25%+ YTD
+- Headline theme confirmed moving 20%+ YTD
+
+THEMES — always check all: Nuclear, Power Infrastructure/AI Data Centers, Space Supply Chain, Quantum Computing, Memory/Semiconductor Equipment, Defense Autonomy, Robotics, and any emerging theme with momentum today.
+
+LAYER HIERARCHY:
+- Layer 0: skip (ETFs, large caps)
+- Layer 1: verify YTD — often already run
+- Layer 2: start here — sub-component manufacturers, specialty materials
+- Layer 3: best zone — single-source parts, niche engineering
+
+PHASE 0 VETTING — 7 gates, all mandatory:
+1. Insider selling (kill if net sellers >60% over 90 days)
+2. Balance sheet (Piotroski F-Score + Altman Z-Score)
+3. Analyst coverage/grade direction (kill if >8 analysts OR 2+ downgrades)
+4. Price vs analyst target (kill if at or above consensus PT)
+5. Legal/dilution overhang (kill on: class action, SEC investigation, going concern, ATM offering, shelf registration, restatement, subpoena, delisted)
+6. Competitive moat (must have specific defensible advantage vs incumbent)
+7. Customer concentration (kill if single customer >30% revenue, no multi-year contract)
+
+OUTPUT: Confirmed themes with evidence, then for each surviving name: ticker, what they make, why undiscovered (analyst count, cap, YTD%), divergence gap, tier (Tier 1 Roth or Tier 2 Taxable). If nothing passes: say so. Zero is valid. Be direct.`;
+
+// ══ CONVICTION SYSTEM PROMPT ══════════════════════════════════════════
+const CONV_SYSTEM = `You are Gary's AV conviction scoring engine. Score 1-10 using his framework.
+
+SCORING: 9-10=must buy, 7-8=strong buy, 5-6=watch, 3-4=wait, 1-2=avoid.
+RSI: <30=oversold entry, 30-50 rising=bullish, 50-70=neutral, >70=overbought.
+EPS: 4/4 beats=+1, 3/4=positive, 2/4=neutral, 1/4 or 0/4=-1.
+PEG: <1.0=Tier 2 ok, 1-2=Tier 2 ok, 2-3=cautious, 3-5=Tier 1 Roth only, >5=avoid.
+
+PRE-SCORE PRESSURE TEST (all 7 required):
+1. Volume Gate: 10-session trend vs average
+2. Offering Gate: last offering price vs current
+3. Going Concern: any unresolved warnings (hard cap: max 5 if yes)
+4. Catalyst Reality: new info or re-presentation of known data
+5. Downside Anchor: actual 52-week low and cash/share
+6. Insider Quality: open market buys, % of position, 10b5-1 or not
+7. Bear Case: 2 sentences — what makes this go down 50%
+
+Score ceilings: going concern=max 5, below offering=max 7, low volume+imminent catalyst=max 6.
+
+OUTPUT FORMAT:
+- Metric table (P/E, PEG, analyst target, RSI, 52wk range, volume, rev growth, mkt cap)
+- EPS last 4 quarters with beat/miss
+- Full pre-score pressure test
+- CONVICTION SCORE: X/10
+- Verdict (2-3 direct sentences, no hedging)
+- Bear case
+- Tier placement
+- Entry / Stop / Target 1 / Target 2
+- Biggest single risk`;
+
 // ══ DISCOVERY ════════════════════════════════════════════════════════
-function runDiscovery() {
+async function runDiscovery() {
   const today = new Date().toLocaleDateString('en-US',{weekday:'long',year:'numeric',month:'long',day:'numeric'});
-  const prompt = `Run discovery. ${today}. Desktop.`;
-  window.open('https://claude.ai/new?q=' + encodeURIComponent(prompt), '_blank');
+  await callClaude(
+    DISC_SYSTEM,
+    `Run supply chain discovery for ${today}. Find Layer 2 and Layer 3 names with momentum. Apply all filters and all 7 vetting gates. Surface only survivors.`,
+    document.getElementById('disc-output'),
+    document.getElementById('disc-status'),
+    document.getElementById('disc-btn'),
+    'Run Discovery ↗'
+  );
 }
 
 // ══ CONVICTION ═══════════════════════════════════════════════════════
-function runConviction() {
+async function runConviction() {
   const ticker = (document.getElementById('conv-ticker').value||'').trim().toUpperCase();
   if (!ticker) { showToast('Enter a ticker first','error'); return; }
   const pd = priceCache[ticker];
   const priceNote = pd ? ` Current price: $${pd.price.toFixed(2)}.` : '';
   const wl = watchlist.find(t=>t.symbol===ticker);
   const zoneNote = wl?.zoneLow ? ` My zone: $${wl.zoneLow}–$${wl.zoneHigh}. Stop: $${wl.stop}. Target: $${wl.target1}.` : '';
-  const prompt = `Run AV on ${ticker}, desktop.${priceNote}${zoneNote}`;
-  window.open('https://claude.ai/new?q=' + encodeURIComponent(prompt), '_blank');
+  await callClaude(
+    CONV_SYSTEM,
+    `Run full AV conviction score on ${ticker}.${priceNote}${zoneNote} Fetch live data, run all 7 pressure test gates, give direct verdict.`,
+    document.getElementById('conv-output'),
+    document.getElementById('conv-status'),
+    document.getElementById('conv-btn'),
+    'Run Conviction ↗'
+  );
 }
 
 // ══ TOAST ════════════════════════════════════════════════════════════
