@@ -929,72 +929,37 @@ async function runLookup(symbol) {
   });
 
   try {
-    const res = await fetch(`${API_BASE}/quote?symbols=${symbol}`, { headers: {'x-api-key': API_KEY} });
-    const raw = await res.json();
-    const arr = Array.isArray(raw) ? raw : (raw.data || [raw]);
-    const q = arr[0] || {};
+    // Single /lookup call — returns price, change$, change%, RSI, analyst target, all in one shot
+    const res = await fetch(`${API_BASE}/lookup?symbol=${symbol}`, { headers: {'x-api-key': API_KEY} });
+    if (!res.ok) throw new Error('HTTP ' + res.status);
+    const q = await res.json();
     lookupData = q;
 
-    const price  = parseFloat(q.price || 0);
-    const change = parseFloat(q.changesPercentage || q.changePercent || 0);
-    const dollarChange = parseFloat(q.change || 0);
-    const chClass = change >= 0 ? 'pos' : 'neg';
-    const chStr   = `${dollarChange >= 0 ? '+' : ''}$${Math.abs(dollarChange).toFixed(2)} (${change >= 0 ? '+' : ''}${change.toFixed(2)}%)`;
-    const yearHigh = parseFloat(q.yearHigh || 0);
-    const yearLow  = parseFloat(q.yearLow  || 0);
-    const vol = parseInt(q.volume || 0);
-    const cap = parseFloat(q.marketCap || 0);
-    const pe  = parseFloat(q.pe || q.forwardPE || q.priceEarningsRatio || 0);
-    const apt = parseFloat(q.priceAvgTarget || q.analystTarget || 0);
+    const price     = parseFloat(q.price || 0);
+    const dollarChg = parseFloat(q.change || 0);
+    const pctChg    = parseFloat(q.changePct || 0);
+    const chClass   = dollarChg >= 0 ? 'pos' : 'neg';
+    const chStr     = `${dollarChg >= 0 ? '+' : ''}$${Math.abs(dollarChg).toFixed(2)}  (${pctChg >= 0 ? '+' : ''}${pctChg.toFixed(2)}%)`;
+    const yearHigh  = parseFloat(q.yearHigh || 0);
+    const yearLow   = parseFloat(q.yearLow  || 0);
+    const vol       = parseInt(q.volume || 0);
+    const cap       = parseFloat(q.marketCap || 0);
+    const pe        = parseFloat(q.pe || 0);
+    const rsi       = q.rsi != null ? parseFloat(q.rsi) : null;
+    const apt       = q.analystTarget != null ? parseFloat(q.analystTarget) : null;
 
     document.getElementById('lk-symbol').textContent = q.symbol || symbol;
     document.getElementById('lk-name').textContent   = q.name || '';
     document.getElementById('lk-price').textContent  = price ? `$${price.toFixed(2)}` : '—';
     const chEl = document.getElementById('lk-change');
-    chEl.textContent  = chStr;
-    chEl.className    = `lookup-change ${chClass}`;
+    chEl.textContent = chStr;
+    chEl.className   = `lookup-change ${chClass}`;
     document.getElementById('lk-range').textContent  = (yearLow && yearHigh) ? `$${yearLow.toFixed(2)} – $${yearHigh.toFixed(2)}` : '—';
-    document.getElementById('lk-vol').textContent    = vol ? (vol > 1e6 ? `${(vol/1e6).toFixed(1)}M` : `${(vol/1000).toFixed(0)}K`) : '—';
+    document.getElementById('lk-vol').textContent    = vol ? (vol > 1e6 ? `${(vol/1e6).toFixed(1)}M` : `${(vol/1e3).toFixed(0)}K`) : '—';
     document.getElementById('lk-cap').textContent    = cap ? (cap > 1e9 ? `$${(cap/1e9).toFixed(1)}B` : `$${(cap/1e6).toFixed(0)}M`) : '—';
     document.getElementById('lk-pe').textContent     = pe ? pe.toFixed(1) : '—';
-    document.getElementById('lk-target').textContent = apt ? `$${apt.toFixed(2)}` : 'Fetching…';
-    document.getElementById('lk-rsi').textContent    = 'Fetching…';
-
-    // Fetch RSI + analyst target from /quote extended or /conviction
-    try {
-      // Try analyst target from quote data first
-      const apt = parseFloat(q.priceAvgTarget || q.targetMeanPrice || q.analystPriceTarget || 0);
-      if (apt) document.getElementById('lk-target').textContent = `$${apt.toFixed(2)}`;
-
-      // Try RSI + analyst target from /conviction endpoint
-      const cvRes = await fetch(`${API_BASE}/conviction?symbol=${symbol}`, { headers: {'x-api-key': API_KEY} });
-      if (cvRes.ok) {
-        const cv = await cvRes.json();
-        console.log('[GCC] conviction keys:', Object.keys(cv).join(', '));
-        console.log('[GCC] conviction sample:', JSON.stringify(cv).slice(0,500));
-
-        // RSI — walk all possible paths
-        const rsiVal = cv.rsi ?? cv.RSI ?? cv.technical?.rsi ?? cv.technicals?.rsi ??
-                       cv.indicators?.rsi ?? cv.data?.rsi ?? cv.score_data?.rsi ??
-                       cv.metrics?.rsi ?? (Array.isArray(cv.rsi_data) ? cv.rsi_data[0]?.rsi : null);
-
-        // Analyst target — walk all possible paths
-        const ptVal  = cv.analystTarget ?? cv.priceTarget ?? cv.targetMeanPrice ??
-                       cv.consensus_pt ?? cv.price_target ?? cv.analyst_target ??
-                       cv.metrics?.analystTarget ?? cv.score_data?.priceTarget;
-
-        document.getElementById('lk-rsi').textContent = rsiVal != null ? parseFloat(rsiVal).toFixed(1) : '—';
-        if (ptVal != null && !apt) document.getElementById('lk-target').textContent = `$${parseFloat(ptVal).toFixed(2)}`;
-        else if (!apt) document.getElementById('lk-target').textContent = '—';
-      } else {
-        document.getElementById('lk-rsi').textContent = '—';
-        if (!apt) document.getElementById('lk-target').textContent = '—';
-      }
-    } catch(e) {
-      document.getElementById('lk-rsi').textContent = '—';
-      document.getElementById('lk-target').textContent = '—';
-      console.warn('[GCC] RSI/target fetch error:', e.message);
-    }
+    document.getElementById('lk-rsi').textContent    = rsi != null ? rsi.toFixed(1) : '—';
+    document.getElementById('lk-target').textContent = apt != null ? `$${apt.toFixed(2)}` : '—';
 
   } catch(e) {
     document.getElementById('lk-price').textContent = 'Error';
