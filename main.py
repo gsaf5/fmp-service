@@ -135,7 +135,7 @@ async def fetch_watchlist_data():
 # ── Routes ────────────────────────────────────────────────────────────────────
 @app.get("/ping")
 async def ping():
-    return {"status": "ok", "service": "Claude Market API v5.3",
+    return {"status": "ok", "service": "Claude Market API v5.4",
             "ts": datetime.utcnow().isoformat()}
 
 @app.get("/")
@@ -2001,11 +2001,12 @@ async def history_analyze(
     gate1_pass = (
         floor_count   >= 3 and
         ceiling_count >= 3 and
-        round_trips   >= 2
+        round_trips   >= 2 and
+        box_width_pass            # box must be 20-40% wide
     )
 
     # ── BOX WIDTH GATE ────────────────────────────────────────────────────────
-    box_width_pass = 18 <= body_width <= 90  # 90% ceiling per Gemini/NSSC discussion
+    box_width_pass = 20 <= body_width <= 40  # Tightened Jun15'26 — true oscillators only
 
     # ── CURRENT PRICE LOCATION ────────────────────────────────────────────────
     current_price = closes[-1] if closes else 0
