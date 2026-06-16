@@ -2393,3 +2393,7 @@ async def claude_proxy(request: Request):
             text += block.get("text", "")
 
     return no_cache({"text": text, "model": data.get("model",""), "usage": data.get("usage",{})})
+@app.get("/claude/test", dependencies=[Depends(verify_key)])
+async def claude_test():
+    key = os.environ.get("ANTHROPIC_API_KEY", "")
+    return {"key_loaded": bool(key), "key_prefix": key[:12] + "..." if key else "MISSING"}
