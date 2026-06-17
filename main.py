@@ -2253,6 +2253,61 @@ async def range_screen(
         "failures":         failures,
     })
 
+# ─────────────────────────────────────────────────────────────────────────────
+# ADD THIS BLOCK TO main.py
+# Paste it JUST BEFORE the line that says:
+#   # ── Gary Command Center ──────────────────────────────────────────────────
+# ─────────────────────────────────────────────────────────────────────────────
+
+# ── Anthropic Credits Balance ─────────────────────────────────────────────────
+
+@app.get("/credits", dependencies=[Depends(verify_key)])
+async def get_credits():
+    """
+    Proxies to Anthropic billing API. ANTHROPIC_API_KEY never leaves the server.
+    GCC header polls this on load to show remaining API credit balance.
+    Returns: { "credits_remaining": 12.34, "status": "ok" }
+    """
+    if not ANTHROPIC_API_KEY:
+        return no_cache({"status": "error", "credits_remaining": None})
+    try:
+        async with httpx.AsyncClient(timeout=10) as client:
+            for url in [
+                "https://api.anthropic.com/v1/organizations/billing/credits",
+                "https://api.anthropic.com/v1/usage",
+            ]:
+                r = await client.get(url, headers={
+                    "x-api-key": ANTHROPIC_API_KEY,
+                    "anthropic-version": "2023-06-01",
+                })
+                if r.is_success:
+                    data = r.json()
+                    credits = (
+                        data.get("available_credits") or
+                        data.get("credits_remaining") or
+                        data.get("balance") or
+                        data.get("amount")
+                    )
+                    if credits is not None:
+                        return no_cache({
+                            "status": "ok",
+                            "credits_remaining": float(credits),
+                            "currency": "USD"
+                        })
+            # Neither endpoint returned a balance — return unavailable
+            return no_cache({
+                "status": "unavailable",
+                "credits_remaining": None,
+                "note": "Billing API not accessible with this key type"
+            })
+    except Exception as e:
+        return no_cache({
+            "status": "error",
+            "credits_remaining": None,
+            "detail": str(e)[:100]
+        })
+
+
 # ── Gary Command Center ───────────────────────────────────────────────────────
 from pathlib import Path
 
