@@ -111,7 +111,7 @@
   .feed-result-header { display: flex; align-items: center; justify-content: space-between; padding: 10px 14px; background: var(--surface2); border-bottom: 1px solid var(--border); }
   .feed-result-type { font-size: 13px; font-weight: 700; color: var(--text); }
   .feed-result-time { font-size: 11px; color: var(--text3); font-family: var(--font); }
-  .feed-result-body { padding: 14px; font-family: var(--font); font-size: 13px; line-height: 1.8; color: var(--text); white-space: pre-wrap; word-break: break-word; overflow-y: auto; max-height: calc(100vh - 280px); }
+  .feed-result-body { padding: 16px; font-family: var(--sans); font-size: 15px; line-height: 1.9; color: var(--text); white-space: pre-wrap; word-break: break-word; overflow-y: auto; max-height: calc(100vh - 280px); }
 
   /* Spinner */
   .feed-spinner { display: flex; align-items: center; justify-content: center; padding: 48px 16px; background: var(--surface); border: 1px solid var(--border); border-radius: var(--radius); }
@@ -143,6 +143,8 @@
   .home-refresh-btn:hover { background: var(--surface2); }
   .home-updated { font-size: 11px; color: var(--text3); font-family: var(--font); }
 
+  .discuss-btn { display:flex; align-items:center; gap:6px; width:100%; padding:10px 16px; background:var(--blue-bg); border:none; border-top:1px solid var(--border); color:var(--blue); font-size:13px; font-weight:600; font-family:var(--sans); cursor:pointer; transition:background 0.15s; }
+  .discuss-btn:hover { background:rgba(29,78,216,0.12); }
   /* WATCHLIST */
   .toolbar { display: flex; align-items: center; justify-content: space-between; padding: 12px 16px; gap: 8px; border-bottom: 1px solid var(--border); background: var(--surface); }
   .toolbar-left { display: flex; gap: 8px; align-items: center; flex: 1; flex-wrap: wrap; }
@@ -233,7 +235,7 @@
   .quick-chip { padding: 5px 12px; border-radius: 20px; font-size: 12px; font-family: var(--font); font-weight: 600; background: var(--surface2); border: 1.5px solid var(--border2); color: var(--text2); cursor: pointer; transition: all 0.1s; }
   .quick-chip:hover { border-color: var(--border2); color: var(--text); background: var(--surface3); }
 
-  .ai-output { background: var(--surface2); border: 1px solid var(--border); border-radius: var(--radius); padding: 18px; min-height: 220px; flex: 1; font-family: var(--font); font-size: 14px; line-height: 1.8; color: var(--text); white-space: pre-wrap; word-break: break-word; overflow-y: auto; }
+  .ai-output { background: var(--surface2); border: 1px solid var(--border); border-radius: var(--radius); padding: 18px; min-height: 220px; flex: 1; font-family: var(--sans); font-size: 15px; line-height: 1.9; color: var(--text); white-space: pre-wrap; word-break: break-word; overflow-y: auto; }
   .ai-output.empty { display: flex; align-items: center; justify-content: center; color: var(--text3); font-size: 14px; font-family: var(--sans); }
   .ai-status { font-size: 12px; color: var(--text3); font-family: var(--font); display: flex; align-items: center; gap: 6px; }
   .ai-status .spinner { width: 13px; height: 13px; border: 2px solid var(--border2); border-top-color: var(--blue); border-radius: 50%; animation: spin 0.7s linear infinite; }
@@ -510,7 +512,7 @@
 
 <script>
 const API_BASE='https://mktpxdata72.com', API_KEY='pifk9AGEImYHyoEhjauKbKKAYK_vOzIiVCBjHeWB0G8', PIN_HASH='200854';
-const HOME_SYMBOLS=['NVDA','NVDL','NFLX','META','ORCL','RKLB','ASTS','QQQ','AMT','AGNC','DVN','NOC'];
+let HOME_SYMBOLS=['NVDA','NVDL','NFLX','META','ORCL','RKLB','ASTS','QQQ','AMT','AGNC']; // loaded from /portfolio on init
 let pinBuffer='',wrongAttempts=0,watchlist=[],priceCache={},refreshTimer=null,cronTimers=[],currentTab='home';
 
 function saveWatchlist(){try{localStorage.setItem('gcc_watchlist',JSON.stringify(watchlist));}catch(e){}}
@@ -718,7 +720,8 @@ function showFeedResult(window, text){
   if(labelEl) labelEl.textContent=window.icon+' '+window.label;
   if(!content) return;
   const now=getET().toLocaleTimeString('en-US',{hour:'numeric',minute:'2-digit',timeZone:'America/New_York'});
-  content.innerHTML='<div class="feed-result"><div class="feed-result-header"><div class="feed-result-type">'+window.icon+' '+window.label+'</div><div class="feed-result-time">'+now+' ET</div></div><div class="feed-result-body">'+text.replace(/</g,'&lt;').replace(/>/g,'&gt;')+'</div></div>';
+  const escaped=text.replace(/</g,'&lt;').replace(/>/g,'&gt;');
+  content.innerHTML='<div class="feed-result"><div class="feed-result-header"><div class="feed-result-type">'+window.icon+' '+window.label+'</div><div class="feed-result-time">'+now+' ET</div></div><div class="feed-result-body" id="feed-result-body">'+escaped+'</div><button class="discuss-btn" onclick="discussInClaude(\'' +window.label+ '\',document.getElementById(\'feed-result-body\').innerText)">💬 Discuss in Claude.ai ↗</button></div>';
 }
 
 async function initHomeFeed(){
@@ -740,6 +743,15 @@ async function initHomeFeed(){
 }
 
 async function loadScanFeed(){ await initHomeFeed(); }
+
+function discussInClaude(label, text){
+  const opener = `I just ran ${label} in my GCC (Gary Command Center). Here is the full output:\n\n${text}\n\n---\nMy question:`;
+  try{
+    navigator.clipboard.writeText(opener).then(()=>{
+      showToast('Copied — paste into Claude.ai to discuss','success');
+    }).catch(()=>showToast('Output copied — paste into Claude.ai'));
+  } catch(e){ showToast('Output copied — paste into Claude.ai'); }
+}
 
 async function saveScanResult(scanType,content){
   if(!scanType||!content) return;
@@ -806,7 +818,26 @@ async function callClaude(system,message,outputEl,statusEl,btnEl,btnText){
     const sr=await fetch(`${API_BASE}/claude`,{method:'POST',headers:{'Content-Type':'application/json','x-api-key':API_KEY},body:JSON.stringify({system,message,max_tokens:4000})});
     if(!sr.ok)throw new Error('HTTP '+sr.status);
     const{job_id}=await sr.json();
-    while(true){await new Promise(r=>setTimeout(r,3000));const pr=await fetch(`${API_BASE}/claude/result/${job_id}`,{headers:{'x-api-key':API_KEY}});if(!pr.ok)throw new Error('Poll '+pr.status);const job=await pr.json();if(job.status==='done'){outputEl.textContent=job.text||'No response.';statusEl.innerHTML=`✓ Done (${elapsed}s)`;setTimeout(()=>{statusEl.innerHTML='';},4000);saveScanResult(outputEl.id,job.text||'');break;}else if(job.status==='error')throw new Error(job.text||'Job failed');}
+    while(true){await new Promise(r=>setTimeout(r,3000));const pr=await fetch(`${API_BASE}/claude/result/${job_id}`,{headers:{'x-api-key':API_KEY}});if(!pr.ok)throw new Error('Poll '+pr.status);const job=await pr.json();if(job.status==='done'){
+          const txt=job.text||'No response.';
+          outputEl.textContent=txt;
+          outputEl.classList.remove('empty');
+          statusEl.innerHTML=`✓ Done (${elapsed}s)`;
+          setTimeout(()=>{statusEl.innerHTML='';},4000);
+          saveScanResult(outputEl.id,txt);
+          // Add discuss button after output
+          const existingBtn=outputEl.parentNode.querySelector('.discuss-btn-inline');
+          if(existingBtn)existingBtn.remove();
+          const db=document.createElement('button');
+          db.className='discuss-btn discuss-btn-inline';
+          db.style.cssText='margin-top:8px;border-radius:var(--radius-sm);border:1.5px solid rgba(29,78,216,0.3)';
+          db.innerHTML='💬 Discuss in Claude.ai ↗';
+          const scanLabel={'disc-output':'Discovery','conv-output':'Conviction','range-output':'Range Trader'};
+          const lbl=scanLabel[outputEl.id]||'Scan';
+          db.onclick=()=>discussInClaude(lbl,txt);
+          outputEl.parentNode.insertBefore(db,outputEl.nextSibling);
+          break;
+        }else if(job.status==='error')throw new Error(job.text||'Job failed');}
   }catch(e){outputEl.textContent='Error: '+e.message;outputEl.classList.add('empty');statusEl.innerHTML='';showToast('Error: '+e.message,'error');}
   finally{clearInterval(si);btnEl.disabled=false;btnEl.textContent=btnText;}
 }
@@ -920,8 +951,19 @@ let toastTimer;
 function showToast(msg,type){const t=document.getElementById('toast');t.textContent=msg;t.className='toast visible'+(type?` ${type}`:'');clearTimeout(toastTimer);toastTimer=setTimeout(()=>{t.className='toast';},2800);}
 function clearTimers(){if(refreshTimer)clearInterval(refreshTimer);cronTimers.forEach(clearInterval);cronTimers=[];}
 
+async function loadPortfolioThenHome(){
+  try{
+    const r=await fetch(`${API_BASE}/portfolio`,{headers:{'x-api-key':API_KEY}});
+    if(r.ok){
+      const data=await r.json();
+      if(data.symbols && data.symbols.length>0) HOME_SYMBOLS=data.symbols;
+    }
+  }catch(e){console.log('Portfolio fetch:',e.message);}
+  loadHomePrices();
+}
+
 function initDashboard(){
-  loadWatchlist();updateMarketStatus();updateHomeGreeting();loadHomePrices();loadScanFeed();clearTimers();
+  loadWatchlist();updateMarketStatus();updateHomeGreeting();loadPortfolioThenHome();loadScanFeed();clearTimers();
   refreshTimer=setInterval(()=>{if(isMarketOpen()){loadHomePrices();if(currentTab==='watchlist')refreshAll();}},60000);
   cronTimers.push(setInterval(updateMarketStatus,30000));
   cronTimers.push(setInterval(updateHomeGreeting,60000));
