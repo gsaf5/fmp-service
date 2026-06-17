@@ -1119,52 +1119,59 @@ Gap vs theme: [X% behind headline]
 
 Zero survivors is valid. Never fill the list with weak names.`;
 
-const CONV_SYSTEM=`You are Gary's AV conviction scoring engine. Score 1-10. 9-10=must buy, 7-8=strong buy, 5-6=watch, 3-4=wait, 1-2=avoid.
+const CONV_SYSTEM=`You are Gary's conviction scoring engine. Score 1-10. 9-10=must buy, 7-8=strong buy, 5-6=watch, 3-4=wait, 1-2=avoid.
 
-RSI MOMENTUM (fetch RSI-14 last 5 sessions from Alpha Vantage):
-- Rising from below 35 + volume > 20-day avg on 2+ sessions = +1
-- Rising from 35-50 + volume confirm = +0.5
-- Flat = neutral. Falling = -1. Above 65 for new entry = cap score at 6 max.
-- Bullish divergence (higher RSI low + lower price low) = +1 regardless of level.
-Output: RSI MOMENTUM: [value, direction, pts over 3 sessions] | VOLUME CONFIRM: [Y/N] | RSI IMPACT: [+1/+0.5/neutral/-1]
+RSI MOMENTUM (use FMP data only — NO Alpha Vantage, NO estimates):
+Fetch from FMP: /stock-price-change and /quote for the ticker.
+What matters is DIRECTION over the last 3 sessions, not the absolute RSI number.
+- Momentum rising (1M improving vs prior period) + volume above 20-day avg = +1 if from oversold, +0.5 if from neutral
+- Momentum flat = neutral
+- Momentum falling = -1
+- Already overbought (up 30%+ in 1M) = cap new entry score at 6
+- Bullish divergence (higher momentum low + lower price low) = +1 regardless of level
+Output: MOMENTUM DIRECTION: [rising/flat/falling] | VOLUME CONFIRM: [Y/N] | SCORE IMPACT: [+1/+0.5/neutral/-1]
+Never estimate or approximate RSI. If FMP data unavailable, state that and score as neutral.
 
-7 PRESSURE GATES (all required before scoring):
-1. Volume Gate: 10-session trend vs average. Flag if below avg with imminent catalyst (cap 6).
-2. Offering Gate: Last secondary offering price vs current. Flag if below (cap 7).
-3. Going Concern: Any unresolved auditor warning = cap 5.
-4. Catalyst Reality: New info or re-presentation of known data?
-5. Downside Anchor: Actual 52-week low and cash/share.
-6. Insider Quality: Open market buys, % of position, 10b5-1 or not.
-7. Bear Case: 2 sentences — what makes this go down 50%.
+7 PRESSURE GATES (all required):
+1. Volume Gate: recent volume vs 20-day avg — flag if below with imminent catalyst (cap 6)
+2. Offering Gate: last secondary offering price vs current — flag if below (cap 7)
+3. Going Concern: any unresolved auditor warning = cap 5
+4. Catalyst Reality: new information or re-presentation of known data?
+5. Downside Anchor: actual 52-week low and cash per share
+6. Insider Quality: open market buys only, % of position, 10b5-1 or not
+7. Bear Case: 2 sentences — what makes this go down 50%
 
 EPS: 4/4 beats=+1, 0-1/4=-1. PEG: <2=Tier 2 ok, 3-5=Tier 1 Roth only, >5=avoid.
 
-OUTPUT FORMAT:
-- Metric table (P/E, PEG, analyst target, RSI, 52wk range, volume, mkt cap)
-- EPS last 4 quarters
-- RSI momentum block
-- Full pressure gate results
-- CONVICTION SCORE: X/10
-- Verdict (2-3 direct sentences, no hedging)
-- Bear case
-- Tier placement
-- Entry / Stop / Target 1 / Target 2
-- Biggest single risk`;
+OUTPUT (concise — no padding):
+Metric table: P/E, PEG, analyst target, 52wk range, volume, mkt cap, beta
+EPS last 4 quarters with beat/miss
+Momentum block (required)
+Gate results (one line each)
+CONVICTION SCORE: X/10
+Verdict: 2-3 direct sentences, no hedging
+Bear case
+Tier: [Tier 1 Roth / Tier 2 Taxable]
+Entry / Stop / Target 1 / Target 2
+Biggest single risk`;
 
 const RANGE_SYSTEM=`You are Gary's Range Trader scanner. Find stocks in confirmed technical ranges.
 
 RANGE QUALIFICATION (all required):
 - Minimum 3 confirmed touches on support AND 3 on resistance
-- Range width 8-35% | Duration 6+ weeks established
+- Range width 8-35% | Duration 6+ weeks
 - Volume declining inside range, EXPANDING on support touch (hard gate — must exceed 20-day avg)
 - No earnings within 2 weeks
 
-RSI — DATA POINT ONLY, NEVER A GATE:
-Report RSI at the support touch. Slow stocks (utilities, energy, financials) may sit at RSI 48 for weeks — that is a valid range trade. Never kill a setup because RSI isn't turning up. Note RSI value, whether it's at/near support, and flag bullish divergence if present.
+RSI — DATA POINT ONLY, NEVER A GATE (use FMP data only, NO Alpha Vantage):
+Derive momentum direction from FMP /stock-price-change and /quote data.
+Report direction at the support touch: rising = ideal, flat = clean, falling = caution.
+NEVER kill a setup because RSI is not turning up. MSEX-type utility ranges are valid without RSI drama.
+Flag bullish divergence (higher momentum low + lower price low) if present.
 
-7 VETTING GATES: Insider (no net selling >40% in 60 days) | Balance sheet (current ratio >1, no going concern) | Dilution (no active ATM >10% float) | Legal (no class action/SEC) | Liquidity (200K+ avg daily vol) | Catalyst (no binary event <2 weeks) | Trend (above 200 SMA or bullish divergence).
+7 VETTING GATES: Insider (no net selling >40% in 60 days) | Balance sheet (current ratio >1, no going concern) | Dilution (no ATM >10% float) | Legal (no class action/SEC) | Liquidity (200K+ avg vol) | Catalyst (no binary event <2 weeks) | Trend (above 200 SMA or bullish divergence).
 
-OUTPUT per setup: ticker, sector, support/resistance levels, touch counts, range width%, volume confirm, RSI reading, gates passed, entry zone, stop (3% below support), target (resistance), R/R ratio, tier (Tier 1 Roth — 3-5 week single).`;
+OUTPUT per setup: ticker, sector, support/resistance levels, touch counts, range width%, volume confirm, momentum direction, gates passed, entry zone, stop (3% below support), target (resistance), R/R ratio, tier (Tier 1 Roth — 3-5 week single). Be direct and concise.`;
 
 async function runDiscovery(){document.getElementById('disc-add-row').classList.remove('visible');const today=new Date().toLocaleDateString('en-US',{weekday:'long',year:'numeric',month:'long',day:'numeric'});await callClaude(DISC_SYSTEM,`Run supply chain discovery for ${today}. RSI momentum screener first. Find Layer 2 and Layer 3 names with momentum. Apply all filters and Phase 0 gates. Surface only survivors.`,document.getElementById('disc-output'),document.getElementById('disc-status'),document.getElementById('disc-btn'),'Run Discovery ↗');showDiscChips(document.getElementById('disc-output').textContent);}
 
