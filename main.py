@@ -2308,6 +2308,66 @@ async def get_credits():
         })
 
 
+# ── Scan Results Store ────────────────────────────────────────────────────────
+# Simple in-memory store — one slot per scan type, overwritten on each new scan.
+# Slots: pre-market, morning, afternoon, after-market, discovery, range
+
+from datetime import datetime as _dt
+
+_scan_results: dict = {
+    "pre-market":   None,
+    "morning":      None,
+    "afternoon":    None,
+    "after-market": None,
+    "discovery":    None,
+    "range":        None,
+}
+
+@app.post("/scan-results", dependencies=[Depends(verify_key)])
+async def save_scan_result(request: Request):
+    """
+    Saves a scan result for a given scan type.
+    Body: { "scan_type": "morning", "content": "...full scan output..." }
+    Overwrites any previous result for that scan type.
+    """
+    body = await request.json()
+    scan_type = (body.get("scan_type") or "").lower().strip()
+    content   = body.get("content", "")
+    if scan_type not in _scan_results:
+        raise HTTPException(
+            status_code=400,
+            detail=f"Unknown scan_type: {scan_type}. Valid: {list(_scan_results.keys())}"
+        )
+    _scan_results[scan_type] = {
+        "content":   content,
+        "saved_at":  _dt.utcnow().isoformat(),
+        "scan_type": scan_type,
+    }
+    return no_cache({
+        "status":    "saved",
+        "scan_type": scan_type,
+        "saved_at":  _scan_results[scan_type]["saved_at"]
+    })
+
+
+@app.get("/scan-results", dependencies=[Depends(verify_key)])
+async def get_scan_results(scan_type: str = Query(default=None)):
+    """
+    Returns all scan results, or a single type if scan_type is specified.
+    GET /scan-results              → all 6 slots
+    GET /scan-results?scan_type=morning → just the morning result
+    """
+    if scan_type:
+        st = scan_type.lower().strip()
+        if st not in _scan_results:
+            raise HTTPException(status_code=400, detail=f"Unknown scan_type: {st}")
+        return no_cache({"scan_type": st, "result": _scan_results[st]})
+    return no_cache({
+        "results":   _scan_results,
+        "timestamp": _dt.utcnow().isoformat()
+    })
+
+
 # ── Gary Command Center ───────────────────────────────────────────────────────
 from pathlib import Path
 
