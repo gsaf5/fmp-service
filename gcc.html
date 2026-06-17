@@ -99,6 +99,13 @@
   @media (max-width: 600px) { .home-3col { grid-template-columns: 1fr; } }
 
   .home-col {}
+  .home-scan-btns { display:flex; flex-direction:column; gap:7px; }
+  .home-scan-trigger { display:flex; align-items:center; gap:12px; padding:11px 14px; background:var(--surface); border:1.5px solid var(--border2); border-radius:var(--radius); cursor:pointer; text-align:left; transition:all 0.15s; width:100%; box-shadow:0 1px 3px rgba(0,0,0,0.04); }
+  .home-scan-trigger:hover { background:var(--blue-bg); border-color:rgba(29,78,216,0.35); transform:translateY(-1px); box-shadow:0 3px 8px rgba(0,0,0,0.08); }
+  .home-scan-trigger:active { transform:scale(0.98); }
+  .hst-icon { font-size:22px; flex-shrink:0; }
+  .hst-label { font-size:14px; font-weight:700; color:var(--text); }
+  .hst-sub   { font-size:11px; color:var(--text3); margin-top:1px; }
   .home-col-label { font-size: 11px; font-weight: 600; color: var(--text3); text-transform: uppercase; letter-spacing: 0.08em; margin-bottom: 8px; padding-bottom: 5px; border-bottom: 1px solid var(--border); }
   .home-col-side {}
   .home-col-center {}
@@ -318,7 +325,7 @@
 <div id="dashboard">
   <div class="header">
     <div class="header-left">
-      <img src="data:image/png;base64,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" id="gcc-logo" onclick="switchTab('home')" style="width:36px;height:36px;cursor:pointer;flex-shrink:0;border-radius:4px;transition:opacity 0.15s" title="Home" alt="GCC" />
+      <img src="data:image/png;base64,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" id="gcc-logo" onclick="switchTab('home')" style="width:52px;height:52px;cursor:pointer;flex-shrink:0;transition:opacity 0.15s" title="Home" alt="GCC" />
       <nav class="nav-tabs">
         <button class="nav-tab watchlist"  onclick="switchTab('watchlist')">📊 Watchlist</button>
         <button class="nav-tab discovery"  onclick="switchTab('discovery')">🔍 Discovery</button>
@@ -326,6 +333,7 @@
         <button class="nav-tab range"      onclick="switchTab('range')">📈 Range</button>
       </nav>
     </div>
+    <div style="flex:1;text-align:center;font-size:12px;font-weight:600;color:var(--text3);letter-spacing:0.06em;text-transform:uppercase;white-space:nowrap;padding:0 12px">Market Intelligence Dashboard</div>
     <div class="header-right">
       <div class="market-status"><div class="market-dot" id="market-dot"></div><span id="market-label">—</span></div>
 
@@ -351,17 +359,43 @@
           </div>
         </div>
 
-        <!-- CENTER: Intelligence feed -->
+        <!-- CENTER: Intelligence feed + scan buttons -->
         <div class="home-col home-col-center">
           <div class="home-col-label" id="feed-label">Intelligence feed</div>
-          <div id="scan-feed">
-            <div class="feed-spinner" id="feed-spinner" style="display:none">
-              <div class="feed-spinner-inner"><div class="spinner-ring"></div><div id="feed-spinner-text">Loading…</div></div>
-            </div>
-            <div id="feed-content">
-              <div class="feed-empty">Opening GCC — determining scan…</div>
-            </div>
+
+          <!-- Scan trigger buttons -->
+          <div class="home-scan-btns">
+            <button class="home-scan-trigger" onclick="triggerScan('pre-market','Pre-Market','🌅')">
+              <span class="hst-icon">🌅</span>
+              <div><div class="hst-label">Pre-Market</div><div class="hst-sub">Pre-open movers &amp; setups</div></div>
+            </button>
+            <button class="home-scan-trigger" onclick="triggerScan('morning','Morning Scan','☀️')">
+              <span class="hst-icon">☀️</span>
+              <div><div class="hst-label">Morning Scan</div><div class="hst-sub">Full market intel &amp; holdings check</div></div>
+            </button>
+            <button class="home-scan-trigger" onclick="triggerScan('afternoon','Afternoon Scan','🕒')">
+              <span class="hst-icon">🕒</span>
+              <div><div class="hst-label">Afternoon Scan</div><div class="hst-sub">45 min to close — act or hold</div></div>
+            </button>
+            <button class="home-scan-trigger" onclick="triggerScan('after-market','After-Market','🌙')">
+              <span class="hst-icon">🌙</span>
+              <div><div class="hst-label">After-Market</div><div class="hst-sub">Post-close movers &amp; overnight setup</div></div>
+            </button>
+            <button class="home-scan-trigger" onclick="triggerScan('earnings-radar','Earnings Radar','📡')">
+              <span class="hst-icon">📡</span>
+              <div><div class="hst-label">Earnings Radar</div><div class="hst-sub">Pre-earnings setups 15–45 days out</div></div>
+            </button>
+            <button class="home-scan-trigger" onclick="triggerScan('earnings-analyzer','Earnings Analyzer','📋')">
+              <span class="hst-icon">📋</span>
+              <div><div class="hst-label">Earnings Analyzer</div><div class="hst-sub">Rate any earnings report 1–10</div></div>
+            </button>
           </div>
+
+          <!-- Result area -->
+          <div id="feed-spinner" style="display:none;margin-top:12px">
+            <div class="feed-spinner"><div class="feed-spinner-inner"><div class="spinner-ring"></div><div id="feed-spinner-text">Loading…</div></div></div>
+          </div>
+          <div id="feed-content" style="margin-top:12px"></div>
         </div>
 
         <!-- RIGHT: Zone status -->
@@ -791,7 +825,69 @@ function showRunButton(win){
 
 async function manualRunScan(){
   const win=getCurrentScanWindow();
-  if(win) runHomeAutoScan(win);
+  if(win) triggerScan(win.type, win.label, win.icon);
+}
+
+const SCAN_SYSTEMS = {
+  "pre-market":        "You are Gary's pre-market scanner (before 9:30 AM ET). Identify top pre-market movers. Check key holdings: RKLB, ASTS, NVDA, NVDL, META, NFLX, ORCL, DVN, NOC, AMT, AGNC, QQQ for pre-market moves. Flag any Roth Tier 1 opportunity to act on at the open. Lean, fast, actionable.",
+  "morning":           "You are Gary's morning scan engine. Full market intelligence briefing: (1) overnight macro and news, (2) key holdings check: RKLB, ASTS, NVDA, NVDL, META, NFLX, ORCL, DVN, NOC, AMT, AGNC, QQQ, (3) RSI momentum: names with RSI rising 3+ sessions from below 50 with volume confirmation, (4) new opportunities worth flagging today, (5) what to watch. Direct and actionable.",
+  "afternoon":         "You are Gary's afternoon scan engine (3:15 PM ET, 45 min before close). Cover: (1) what developed today, (2) holdings to act on before close: RKLB, ASTS, NVDA, META, NFLX, DVN, NOC, (3) new afternoon opportunities from options or news, (4) overnight research queue with priorities, (5) anything before 4 PM NAV cutoff. Direct and actionable.",
+  "after-market":      "You are Gary's after-market scanner. Market is closed. Cover: (1) earnings after close from holdings or watchlist, (2) notable after-hours movers, (3) news that changes tomorrow's setup, (4) what to prep for pre-market. Holdings: RKLB, ASTS, NVDA, META, NFLX, ORCL, DVN, NOC, AMT, AGNC. Concise.",
+  "earnings-radar":    "You are Gary's pre-earnings radar. Find stocks with earnings 15-45 days out with strong pre-earnings setups. Goal: get IN before the move. Apply RSI momentum screener (rising RSI from below 50 with volume required). Apply Phase 0 gates. Surface only clean setups with clear catalysts. Include entry zone, stop, and expected move range.",
+  "earnings-analyzer": "You are Gary's earnings analyzer. Rate the most recent earnings report for the requested stock 1-10. Include: EPS and revenue beat/miss, guidance change, management tone, key metrics vs expectations, stock reaction validity, and conviction impact. End with a clear verdict: add, hold, trim, or exit."
+}
+
+async function triggerScan(scanType, label, icon){
+  const spinner=document.getElementById('feed-spinner');
+  const content=document.getElementById('feed-content');
+  const labelEl=document.getElementById('feed-label');
+  if(labelEl) labelEl.textContent=(icon||'')+' '+label;
+  if(content) content.innerHTML='';
+  if(spinner) spinner.style.display='block';
+
+  const system = SCAN_SYSTEMS[scanType] || SCAN_SYSTEMS['morning'];
+  const today = new Date().toLocaleDateString('en-US',{weekday:'long',year:'numeric',month:'long',day:'numeric'});
+  const message = scanType==='earnings-analyzer'
+    ? 'Which stock earnings would you like me to analyze? (Gary will specify ticker)'
+    : label+' for '+today+'. Run the full scan now.';
+
+  let attempt=0;
+  while(attempt<3){
+    attempt++;
+    try{
+      if(attempt>1){
+        const w=attempt*15;
+        document.getElementById('feed-spinner-text').textContent='Rate limited — retrying in '+w+'s…';
+        await new Promise(r=>setTimeout(r,w*1000));
+      }
+      const sr=await fetch(API_BASE+'/claude',{method:'POST',headers:{'Content-Type':'application/json','x-api-key':API_KEY},body:JSON.stringify({system,message,max_tokens:4000})});
+      if(sr.status===429){if(attempt<3)continue;throw new Error('Rate limited — try again in a minute');}
+      if(!sr.ok) throw new Error('HTTP '+sr.status);
+      const{job_id}=await sr.json();
+      let elapsed=0;
+      while(true){
+        await new Promise(r=>setTimeout(r,3000));
+        elapsed+=3;
+        const textEl=document.getElementById('feed-spinner-text');
+        if(textEl) textEl.textContent='Running '+label+'… '+elapsed+'s';
+        const pr=await fetch(API_BASE+'/claude/result/'+job_id,{headers:{'x-api-key':API_KEY}});
+        if(!pr.ok) throw new Error('Poll '+pr.status);
+        const job=await pr.json();
+        if(job.status==='done'){
+          if(spinner) spinner.style.display='none';
+          showFeedResult({type:scanType,label,icon}, job.text||'No response.', new Date().toISOString());
+          await saveScanResult(scanType, job.text||'');
+          attempt=99; break;
+        } else if(job.status==='error'){throw new Error(job.text||'Scan failed');}
+      }
+      break;
+    } catch(e){
+      if(attempt>=3){
+        if(spinner) spinner.style.display='none';
+        if(content) content.innerHTML='<div class="feed-empty">Error: '+e.message+'</div>';
+      }
+    }
+  }
 }
 async function runHomeAutoScan(window){
   const spinner=document.getElementById('feed-spinner');
@@ -863,29 +959,30 @@ function showFeedResult(window, text){
 }
 
 async function initHomeFeed(){
-  const win=getCurrentScanWindow();
-  if(!win) return;
-  const labelEl=document.getElementById('feed-label');
-  if(labelEl) labelEl.textContent=win.icon+' '+win.label;
-
-  // Always check cache first — display if anything stored, fresh or not
+  // On load: check Railway cache and display most recent result if exists
+  // Never auto-run a scan — user taps a button to spend a credit
   try{
     const r=await fetch(`${API_BASE}/scan-results`,{headers:{'x-api-key':API_KEY}});
     const data=await r.json();
     const results=data.results||{};
-
-    // Show the most relevant cached result (current window first, then any)
-    const stored=results[win.type];
-    if(stored && stored.content){
-      showFeedResult(win, stored.content, stored.saved_at);
-      return;
+    const order=['morning','pre-market','afternoon','after-market','earnings-radar','earnings-analyzer'];
+    // Show most recent result by saved_at timestamp
+    let latest=null, latestTime=null;
+    for(const k of order){
+      if(results[k]&&results[k].saved_at){
+        const t=new Date(results[k].saved_at);
+        if(!latestTime||t>latestTime){latestTime=t;latest={...results[k],type:k};}
+      }
     }
-    // No result for current window — show run button
-    showRunButton(win);
-  } catch(e){
-    console.log('Feed cache check error:',e.message);
-    showRunButton(win);
-  }
+    const META={'morning':{icon:'☀️',label:'Morning Scan'},'pre-market':{icon:'🌅',label:'Pre-Market'},'afternoon':{icon:'🕒',label:'Afternoon Scan'},'after-market':{icon:'🌙',label:'After-Market'},'earnings-radar':{icon:'📡',label:'Earnings Radar'},'earnings-analyzer':{icon:'📋',label:'Earnings Analyzer'}};
+    if(latest){
+      const meta=META[latest.type]||{icon:'📋',label:latest.type};
+      const labelEl=document.getElementById('feed-label');
+      if(labelEl) labelEl.textContent=meta.icon+' '+meta.label;
+      showFeedResult({type:latest.type,...meta}, latest.content||'', latest.saved_at);
+    }
+    // If no cache, feed-content stays empty — buttons above invite user to run a scan
+  } catch(e){ console.log('Feed cache check:',e.message); }
 }
 
 async function loadScanFeed(){ await initHomeFeed(); }
@@ -988,19 +1085,21 @@ async function callClaude(system,message,outputEl,statusEl,btnEl,btnText){
   finally{clearInterval(si);btnEl.disabled=false;btnEl.textContent=btnText;}
 }
 
-const DISC_SYSTEM=`You are Gary's supply chain discovery engine.
+const DISC_SYSTEM=`You are Gary's unified Discovery engine. Run all 5 engines in one report. No duplicates across engines.
 
-STEP 1 — RSI SCREENER (runs first, before everything):
-Fetch RSI-14 daily last 5 sessions. Screen OUT: RSI flat/falling, RSI above 65, RSI rising on below-avg volume all 3 sessions. Screen IN: RSI rising 3+ sessions + volume above 20-day avg on 2 of 3 days. Priority: below 35 rising = HIGHEST, 35-50 = STANDARD, 50-65 = LOWER. Must be above 200-day SMA OR show bullish RSI divergence.
+RSI SCREENER FIRST (before everything): Fetch RSI-14 daily last 5 sessions. Screen OUT: RSI flat/falling, above 65, rising on below-avg volume all 3 days. Screen IN: RSI rising 3+ sessions + volume above 20-day avg on 2 of 3 days. Priority: below 35 rising = HIGHEST, 35-50 = STANDARD. Must be above 200 SMA or bullish RSI divergence.
 
-STEP 2 — HARD FILTERS: YTD under 40% | Under 8 analysts | Under $3B cap | Lagging theme 25%+ YTD | Theme confirmed 20%+ YTD.
+HARD FILTERS: YTD under 40%, under 8 analysts, under $3B cap, lagging theme 25%+ YTD.
 
-STEP 3 — PHASE 0 (7 gates): Insider selling | Balance sheet | Analyst coverage/direction | Price vs target | Legal/dilution overhang | Competitive moat | Customer concentration. First kill stops the sequence.
+PHASE 0 (7 gates): Insider | Balance sheet | Analyst direction | Price vs target | Legal/dilution | Moat | Customer concentration. First kill stops sequence.
 
-THEMES: Nuclear, Power Infra/AI Data Centers, Space Supply Chain, Quantum, Memory/Semis, Defense Autonomy, Robotics, any theme with momentum today.
-LAYERS: Skip Layer 0 (ETFs, large caps). Layer 2 = sub-components. Layer 3 = single-source niche suppliers.
+ENGINE 1 SPACE: Government contracts, SpaceX manifest, insider buys, launch news. Find MNTS-type names.
+ENGINE 2 QUALITY COMPOUNDERS: Profitable micro/small caps near 52wk highs, accelerating fundamentals, low coverage. Find MPTI-type at $72 not $85.
+ENGINE 3 TIER 1 SPECULATIVE: Insider cluster buys, oversold+catalyst, binary events, conference plays, pivot plays.
+ENGINE 4 UNUSUAL OPTIONS: Large call sweeps under $2B cap with fundamental confirmation.
+ENGINE 5 SUPPLY CHAIN + IEHC: Layer 2/3 suppliers behind momentum themes. Defense micro-cap 8-K contracts, OTCQX uplistings, CEO/CFO Form 4 buys. Find next IEHC at $8 not $20.
 
-OUTPUT per survivor: ticker, what they make, why undiscovered, RSI data, divergence gap, tier (Tier 1 Roth or Tier 2 Taxable). Zero survivors is valid.`;
+OUTPUT: One report, engine by engine, no duplicates. For each survivor: ticker, what they do, why undiscovered, RSI data, tier (Tier 1 Roth / Tier 2 Taxable), entry/stop/target. Zero survivors is valid`;
 
 const CONV_SYSTEM=`You are Gary's AV conviction scoring engine. Score 1-10. 9-10=must buy, 7-8=strong buy, 5-6=watch, 3-4=wait, 1-2=avoid.
 
