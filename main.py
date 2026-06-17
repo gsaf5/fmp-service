@@ -2368,6 +2368,51 @@ async def get_scan_results(scan_type: str = Query(default=None)):
     })
 
 
+# ── Portfolio Store ───────────────────────────────────────────────────────────
+# Stores Gary's current holdings as a ranked ticker list (by position value).
+# No dollar amounts, no share counts — tickers only, sorted by value descending.
+# GCC home page reads this to populate the live price panel with real top holdings.
+# Claude updates this automatically when Gary reports trades in chat.
+
+_portfolio: dict = {
+    "symbols": [],        # tickers sorted by position value descending, top 10
+    "updated_at": None,   # ISO timestamp of last update
+}
+
+@app.get("/portfolio", dependencies=[Depends(verify_key)])
+async def get_portfolio():
+    """
+    Returns ranked ticker list for GCC home price panel.
+    GET /portfolio → { "symbols": ["NVDA","NVDL",...], "updated_at": "..." }
+    """
+    return no_cache(_portfolio)
+
+
+@app.post("/portfolio", dependencies=[Depends(verify_key)])
+async def update_portfolio(request: Request):
+    """
+    Updates the ranked ticker list.
+    Body: { "symbols": ["NVDA","NVDL","NFLX","META","ORCL","RKLB","ASTS","QQQ","AMT","AGNC"] }
+    Claude calls this automatically when Gary reports position changes in chat.
+    Full overwrite — always send the complete ranked list.
+    """
+    body = await request.json()
+    symbols = body.get("symbols", [])
+    if not isinstance(symbols, list):
+        raise HTTPException(status_code=400, detail="symbols must be a list")
+    # Sanitize — uppercase, strip, max 20
+    clean = [str(s).upper().strip() for s in symbols if s][:20]
+    _portfolio["symbols"] = clean
+    _portfolio["updated_at"] = _dt.utcnow().isoformat()
+    return no_cache({
+        "status": "updated",
+        "symbols": clean,
+        "count": len(clean),
+        "updated_at": _portfolio["updated_at"]
+    })
+
+
+
 # ── Gary Command Center ───────────────────────────────────────────────────────
 from pathlib import Path
 
