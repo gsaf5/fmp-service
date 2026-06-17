@@ -80,6 +80,14 @@
   .section { display: none; flex: 1; flex-direction: column; }
   .section.active { display: flex; }
 
+  .feed-card { background: var(--surface); border: 1px solid var(--border); border-radius: var(--radius); overflow: hidden; box-shadow: 0 1px 3px rgba(0,0,0,0.04); }
+  .feed-card-header { display: flex; align-items: center; justify-content: space-between; padding: 10px 14px; border-bottom: 1px solid var(--border); background: var(--surface2); }
+  .feed-card-type { font-size: 12px; font-weight: 700; color: var(--text); display: flex; align-items: center; gap: 6px; }
+  .feed-card-time { font-size: 10px; color: var(--text3); font-family: var(--font); }
+  .feed-card-body { padding: 12px 14px; font-family: var(--font); font-size: 13px; line-height: 1.75; color: var(--text); white-space: pre-wrap; word-break: break-word; max-height: 320px; overflow-y: auto; }
+  .feed-card-body.collapsed { max-height: 90px; overflow: hidden; mask-image: linear-gradient(to bottom, black 60%, transparent 100%); -webkit-mask-image: linear-gradient(to bottom, black 60%, transparent 100%); }
+  .feed-expand-btn { width: 100%; padding: 8px; background: var(--surface2); border: none; border-top: 1px solid var(--border); font-size: 12px; color: var(--blue); cursor: pointer; font-family: var(--sans); font-weight: 600; }
+  .feed-expand-btn:hover { background: var(--surface3); }
   /* HOME */
   .home-wrap { padding: 16px; flex: 1; overflow-y: auto; max-width: 900px; margin: 0 auto; width: 100%; }
   .home-greeting { font-size: 15px; color: var(--text2); margin-bottom: 18px; line-height: 1.5; }
@@ -258,9 +266,6 @@
   .toast.error   { background: var(--red); }
   .toast.success { background: var(--green); }
 
-  .credits-ok  { color: var(--green) !important; }
-  .credits-warn { color: var(--amber) !important; }
-  .credits-low  { color: var(--red) !important; }
   /* Scrollbar */
   ::-webkit-scrollbar { width: 4px; }
   ::-webkit-scrollbar-track { background: transparent; }
@@ -308,7 +313,7 @@
 <div id="dashboard">
   <div class="header">
     <div class="header-left">
-      <div class="header-logo" id="gcc-logo" onclick="switchTab('home')">GCC</div>
+      <img src="data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAACgAAAAoCAYAAACM/rhtAAABCGlDQ1BJQ0MgUHJvZmlsZQAAeJxjYGA8wQAELAYMDLl5JUVB7k4KEZFRCuwPGBiBEAwSk4sLGHADoKpv1yBqL+viUYcLcKakFicD6Q9ArFIEtBxopAiQLZIOYWuA2EkQtg2IXV5SUAJkB4DYRSFBzkB2CpCtkY7ETkJiJxcUgdT3ANk2uTmlyQh3M/Ck5oUGA2kOIJZhKGYIYnBncAL5H6IkfxEDg8VXBgbmCQixpJkMDNtbGRgkbiHEVBYwMPC3MDBsO48QQ4RJQWJRIliIBYiZ0tIYGD4tZ2DgjWRgEL7AwMAVDQsIHG5TALvNnSEfCNMZchhSgSKeDHkMyQx6QJYRgwGDIYMZAKbWPz9HbOBQAAARdklEQVR42nWYaYzj9nnGfyQlUQdFUqKkGc3MzuzhPbxre+1dX3EOJ3HsxHbiummLxq2BtE3hXkADBEHRAwHaT22/tEVboFfSIg2StEiDpG3iOLHb+Mxu1pvs7I6793pn59AtXqJEiqTEfpidiRdFP+kLxZd83vf/8nl+wubmZqLrOp1Oh3q9TqPRYG5ujlarhe/7LC0tYVkW+XyeKIoASKfT+L6Pqqr0+31mZmZYW1tDkiQWFhZoNBrMzs7S6XQol8u4rksulwOg0WhQqVSQZRnP8yiXy/R6PWZmZmg2m9TrdZrNJrVaDdu2ERzHSVzX3bmwUqnQ7/eZTCZUKhVs26ZYLBIEAalUCoA4jpFlmdFohKZpdLtddF1HlmW63e7OPUqlEq7rUigUCIIASZLIZDKYpkmxWCSdTjMYDCiVSju1t39N00RVVYTNzc1EVVUsy8IwjJ0CSZLsFBkOh2SzWeI4BiCVShEEAYVCAcdxMAyDTqeDIAhUq1V6vR6GYWBZFqqqMhqNkGWZOI6J4xjDMPA8jyAIKBaL2LaNYRi3PGS5XGYwGPz/CgZBQLVaxfO8HQXT6TRJkmwpmM1uKaiqmGafilFBFEW63S7GzXvouo5zU8HxTQUlSaLX61EsFne6oOs6/X5/p7ZhGD9RsNFoJMViEdM0b5E4iqIdVT3PI5vNEkURgiAgZzL4oxHpTAbTdtFLJTq9Hrl8jqKiYJkmRqnEwHEol3T8ICAty0RhRJJM0TQNy7JIkgRVVbFt+xaBblHQtu1kew7e+RZBEFCv13Fdl3w+z3gcImdShGGENRyR1XRiUUCUZZJ0Gj+82X5JREymyKJAEob4touaySDEIfl8jjiBMAypVip4nsdwOLxFwf8zg41GI1EUZecttiUWBIFer4em64TjABEwgxg/nWGSkWkPAlYbfVZvtDD7NqEfME0mpNIyuXyW2kyZxfkqS7MlZvQCqTAk6vWY0QrkFYV2u0s+n9uZ422Bttur6zqe520p6Hkeuq5jmiaGYdDv95lOp5QNg/FoiDsKcFIFolyBc9c2uL7WJRr56LLA7qqKVsgyWy0RxxMESWLoB7y90cUNE3qjMUgSRw7u4raFGnGvz2x6wsLcLM7AIwpDtg9pqVTCtu2t2XUcstksqdFohKqqmKa5MwflchlBkhi5NhvmgJE2y3p/yItff55yLs17j+7jrkN3kc7KjOKErj3A9EOiyYS0KFDQdd6zNI+el7H6NpdvtHjl5FlOJCKPPvIQsSRiX73B3rpBVlXxfZ8gCMhms/i+v7NDNU1DsCwrGQ6HaJqGbduUSiVMyyKblljtezjqPG+evcjyiZN89KE7eOiBu4jTWc5dXWf1+jrhaISu5JCmE8olHdOySFIZ7KFPKptj99IcRw/sRmbCd146wUunLvDBxx9j764a+qDF4cUZ+rbDTK12yxYplUpbh6TZbCb5fH5nDkzTYqZqsPL2Ou1cnZOnV1hdPs1v/MJHmNu3jzfPX2d5+S10acqDR/Zyx/49RIGPYZSxra0X7PV7ZHIFVi5d41LDZM0ecuTIQR64cz+Xzr7FP3ztJe575EPccWCJ2XGXu/Yt0O6aqGrxZotLDAYuiqLcqqBlWVQqBtdW17maqFy43uL0957n937rGeTqHC+8fIJBu8nPvO84R2+/DdM0GYcxhUIB23FQVRXXddE1ncHApWqU8UdDrNGY/3jjLCMxw8c+/D76N67zt1/5Dvd88EOUZYn7KiJlXQFB5PXlS9y9b4Fdc7O4gwHi9jZ3HAdN1zF7PS7aEe1ByKmXXuTTn3wKQa/x7RdfI+e7fPaZJ7htsU6z3aWgqKTTaTzPQ1NViopCSdfxvAGFQoGeaREjosgZfu2phzlg5Pm3/3gJbWGJT/3MBzj54otcXjmHnJVRi0V+eH6Vi9cbzM3WcAcDstksYjabxfM8FKVIFPisWyPCvMGp107w5IOH0BaWePPM/6BMfJ57+hHCKGYw9EmnUjiOg6IoDIdDisUim5ubKIqC53k731+ShLyi0DVtnnr3PRxfrPDiyycpLezmM7/4ESbjIaNgzKYz5lsnL6AUC6iqiud5JEmC0G63k0wmg+8HKPks37vY5qI5xjp/mmd/9nHOtwdc/58VfvvjHyQIY0RR3DEMmUyGIPBRlK3ZKRQKeJ63M+CKouC6LpPJBE3T8P0AVcny9TdWkEpVFks5dqUTxNocf/6NV7HbHZ5891Het6QjF4oMXBdxPB4TxTEjz+XKeoteLGC2mjxw5wGef+UU1o23efz+O3CGY7wgxHEHJElCJpMhiiJSqTSW4yJmZDL5Aik5h+uNECUJ399aYXEc0zNtpoKIMwp5z+172LyxzkvfP4FWn+W/bthsXLrE5bMr2M0Giqox9IbkcjnEXC6H7/tUDIOGM8IdhWjSBCUFx3fX+MT7j1FIi7ieR0krUqlWMG2bOI4JxiFRIjI3P0fNKBP4AbquMlefIa8UGQx9PG9IJq+wuLiAMxhwZuUCc/UqGa/PE++6mzO+yD//1d+wb2mRn3v2EyxWNeLJBFEUmE6npKIoQtd1/IHLNFvE61qEdpc979qPJEl887UfE2YKNK5eIs2E+48d5dy1DX76/fciCBL1SpnXTv6Ys5sWc7t3s7a6ykI2IZvNsdpo87MfeohKpcw3nn+JN8+sMDc3xxe++rv88jNPk9R3849/9xV+6thtrCNQrZRZUsekUyniyWTrS5LP53FsG6Ok41536ff6LMgpCtkcX/73FyhW63zi0eNYh+dZXW/w6pnzfPi992FbNvsPHuT08govvHKCn39663Rv6BJvnDnPuStrPP3++1G1EmdWLvJfr5zkU899klAusve2fSzefpA//avPc3T/Lu69+xD901foDXymlSK2ZaEWNTxvQGo4HFIul2m120SCQDgaMlvXaZsOuaLOzz18jPb6KmJO4ciRI+y7bR/TOMJ0hown8PZmh2efeoQ7DyxyY32D2xZmmdEKFBSFC6ubjJG4dn2dX//NX+Gbr/6IlfNX+fRvfpKv//v3cDZWWfzoI8TTBEPN4fkBnX7M/iN7abS6aJqKWCgUME2TmZkZ4jhmGsfEwCCasLRrHl3XiRKRyxsdrnYs3CTDuWubtPoW5jBgz9I8exYXuLHeoFqt0Wi1yeYLbDRbDKKEV078iCEiX/ru6/jtBvcsVfizv/h76kqGP/rsc7iDIYIokkQh43GIpmv0uj30ks5wOCS1vRb63Q5CkiCIIuubTWZnq2hKFtd1ycoZXnz5B+TSKT72sceRUhJ2r48zGJIg0my22LVrgXa7Q61Wo9vpUJ+Z4fvLP+Dq9Rt4UcRsQeZ3Pv3LBGHId0+c5Yl3380PVq5QLCpMowg5myWMIlzb5sjhfTTaHXRNQ1QUhb5pUq/PIkY+xVIZy7JpbWxg2Q6rrR5KPstzH3+Uxx++n8j3KGQyRGHA8o9/TC6Xpe8FbDSaGEaZTrfLcCKw1uqh51J0Oh3uO7CbJx95Nzc2m/h+wIcfOsrKxat0TYeNtQ2m4ZjheEIyiZmrbmWT8s0slBoOh5T0ErZlUtcV3ly1uO/4MS6uLFOxbCZhwGaziZDAdDolnkzp+xOeeuQ9/PUXvso0DLh9/z42xiEd0yWKY6RUCtcPObW8giSAJAk0NxtEUYQsywTjMaIk0Wus03YjjDv3MLjaR5Ji/IHNrr27aXe66Jq2ZVhtx2FudobXz5znq2caHKzmefLORf74C19Dl0XkTIp8sYhu1BAKKkY+xRPHDzEVJP72S19jNB5TKZdR1CJSKs0oTuh1u3zgntu5be8i//StV8nIGYoSBEMPx/XYaLSY33+A2w8dwJCmfPf6kFJmymeeepBuz6RcLhGGIYLv+0kURdiWRVHT+MMvf59EzvKrD+2h6405tdpG8j3qRon9B/ezoOcoiFMSIcU48CkbZd44dQYnAh+RpaVFAsfk4EyJ+foMrVYbRS2y4Y5ZuXIDs99HmkR4YYS+tJdK5CFmFf7l1CqPHTD4yD17yOSLuI69taj7/T5zc3P4fsBk7HPnvMqLl/ssNwc8tEvlDT/g7uP3cN+chsyUII6ZJCnCsU8+n6fVavPeB47h2Ba6XqLX6WAc3sN6o8XIHxNGEeNgTFWKeeyOJYrKYd5utLg0TDjzoxX27Z/h1Q2bydBlsTSHVjbYbDSp3MzVYqFQYG1tDUUpoGg6x/bWmLgmp97uE8sF7lso8/LJc/xwvYc93jILYRSy7YJKpRKbzRaZbJ71RpO8prPZ6t4M8F1KpRJBEBALIlMELl5f54ob8foPz3HXjMowXeTc2y0W8vDA0cNsNppUbxINTdMQ0+k0cRyTSqVotTrceeggD98+x5Vrq3z1xBWOHz3EXi3Na8tXudAfMggjCrJMGIYUCgqO41AulXAch4phYFvWlru+6YzdwZY3zAgCjb7JeiTy+vIV9ihpFvcu8a3lNUa9Fs88eh+u62KUyzuRczgcIjqOcxPctDCMMs1Wi1/56Q+xK5dwauUKX3zjIo/dfwezUszzb5zjTMtjYzACIBr7aNpNF61v5RG9VMKybDRNZ+gN0JQCfhBwpWtxaTDhhR+co0rIe+49zNdOvc2F85d44tgeds+WkbM/iR6DwYB8Pr9l+bdj5xZL0RiNhoSThM/85b8SZnXee+wAjx00OLl8mTPNAYcPH+DIYoWKLFDOyRRzWfzREF3TcBwXVVNxHJepJOGEUxpuwIWNPudWLvKu3QbHjx7i66evc+L0eY7UZH7/lz5KLr/VDV3XsW0b9WbaExqNRvLO8KwoCt1uj2q1wumzb/G5z/8nqfIMdx3ex6MHK0Suy6vnN3ASiaWleeYMjVktjzSNKOZzjMMQKZ3BGoywg5jN/oD19RbpYMCDB+oUajP896UOb546y1Ih4XO/+jTzc3XieEoQ+DvwoFQqsbm5+ZPQVCqVmE6n9E2Thfl5Go0mM1WDi6vr/MkXn6c/kdl/52EePDjHIT1FY22D5Sub+JJMLKUpFItIKZBSacJxzCSKSMKQ3DTg9gUDY6bGFXfKm5ebXF5e5p55lc88+zjlcolOp0ehkEeWZRzHoV6v0263t1Jds9lMcrkcg8GAarVKHMfvIFMDjJKG4w744rdf5+WVNZT5JQ4dOcD+WZWZzJR0FBCOI0xngKZruO6AUkkjCgKyuRyhlKYdilxtD7h8/jJxd5OnHjzIxz94P6l0BscdUCwqdLtd6vU6AP1+H03TGI1GWwpug0hRFLEsaycI5fN5hqMRhXyetAQXrjf45ivLnFntUJidpzJfZ7ZWoaTI5FMi2ZREHMdMEBiMY0wvwHI8rHYHv9Pg3t1Vnn74bhZnDYJwQhAEWzVuxl5Zlul0OhSLRQaeRy6bJSUIAkmSIIoiw+GQON7addPpFFEUEYDJdMrIDzmwNMcffGqRty6vcubKBhfWr3Nt7RpptYSQyZLJyggIiAIkcUReTCgnEffu1Tj6yAEO7p5nHMY4A59sVgZgu74sy/i+z2QyubX+Nh/cBka1Wm2HLr0T32YyGaI4JkkSioU8JFMQRNabHfypiOUFCDcRcS6bIcOU2VIRRU4RjQPkXAFvNEIURFIpiTAM2R4twzAIgoDts7A9YqPR6Cd8sFKpMJlMdvCtc5MUbMPLMAyRJAlBEIiiiHQmwzgI0DWN0dBD11Qc20bVtK28XCxiOy5yLk9WzmLZFnImgyAIO5F1NBrtIOByuQyAaZrUajUsy9pKde8E4aIo7mA4TdNuUXAb/06nU2RZJgpDFEXBtCwyuTyNTg+5oNJo98gWVLp9i2wuTzqVotvtkM/lmE6nTCYT0uk0QRCgKFu7r1qtEkXRDmHb3oOj0WjLsG5bftu26ff71Gq1HZm3CWsURYiiiCRJjMdj8vk822zbMk1q1SrdboeZmRq9XhfDMBgOh2xubu60UBRFRFHc+b/jOJTLZdbW1nYetNvtoqoq3W4XRVH4X3f3sIKY/kB/AAAAAElFTkSuQmCC" id="gcc-logo" onclick="switchTab('home')" style="width:36px;height:36px;cursor:pointer;flex-shrink:0;border-radius:4px;transition:opacity 0.15s" title="Home" alt="GCC" />
       <nav class="nav-tabs">
         <button class="nav-tab watchlist"  onclick="switchTab('watchlist')">📊 Watchlist</button>
         <button class="nav-tab discovery"  onclick="switchTab('discovery')">🔍 Discovery</button>
@@ -318,10 +323,7 @@
     </div>
     <div class="header-right">
       <div class="market-status"><div class="market-dot" id="market-dot"></div><span id="market-label">—</span></div>
-      <div id="credits-display" style="font-size:11px;color:var(--text3);font-family:var(--font);display:flex;align-items:center;gap:4px;padding:4px 8px;background:var(--surface2);border:1px solid var(--border2);border-radius:6px;cursor:default" title="Anthropic API credits remaining">
-        <span style="opacity:0.6">API</span>
-        <span id="credits-val" style="font-weight:600;color:var(--text2)">…</span>
-      </div>
+
       <button class="lock-btn" onclick="lockDashboard()">🔒</button>
     </div>
   </div>
@@ -345,9 +347,17 @@
         <button class="scan-btn btn-blue" onclick="copyPrompt('Run pre-earnings radar, desktop')">
           <span class="scan-btn-icon">📡</span><span class="scan-btn-label">Earnings Radar</span><span class="scan-btn-sub">Pre-earnings setups</span>
         </button>
+        <button class="scan-btn btn-blue" onclick="copyPrompt('Run after-market scan, desktop')">
+          <span class="scan-btn-icon">🌙</span><span class="scan-btn-label">After-Market</span><span class="scan-btn-sub">Post-close · movers</span>
+        </button>
       </div>
 
-      <div class="home-panels">
+      <div class="scan-group-label" style="margin-top:20px">Intelligence feed — latest scan results</div>
+      <div id="scan-feed" style="display:flex;flex-direction:column;gap:10px">
+        <div style="color:var(--text3);font-size:13px;padding:16px;background:var(--surface);border:1px solid var(--border);border-radius:var(--radius);text-align:center">No scan results yet — run a scan to populate the feed.</div>
+      </div>
+
+      <div class="home-panels" style="margin-top:20px">
         <div>
           <div class="scan-group-label">Key holdings — live prices</div>
           <div class="home-panel">
@@ -551,11 +561,12 @@ document.addEventListener('keydown',e=>{if(document.getElementById('pin-screen')
 
 function switchTab(tab){
   currentTab=tab;
-  document.getElementById('gcc-logo').classList.toggle('active',tab==='home');
+  document.getElementById('gcc-logo').style.opacity=tab==='home'?'1':'0.7';
   document.querySelectorAll('.nav-tab').forEach(t=>t.classList.remove('active'));
   const at=document.querySelector(`.nav-tab.${tab}`);if(at)at.classList.add('active');
   document.querySelectorAll('.section').forEach(s=>s.classList.remove('active'));
   document.getElementById(`section-${tab}`).classList.add('active');
+  if(tab==='home'){loadScanFeed();loadHomePrices();}
   if(tab==='conviction')buildQuickPicks();
   if(tab==='watchlist'){if(Object.keys(priceCache).length){renderList(priceCache);}else{refreshAll();}}
 }
@@ -620,6 +631,35 @@ async function loadHomePrices(){
   document.getElementById('home-updated').textContent=`Updated ${et} ET`;
 }
 
+async function loadScanFeed(){
+  try {
+    const r = await fetch(`${API_BASE}/scan-results`,{headers:{'x-api-key':API_KEY}});
+    const data = await r.json();
+    const feed = document.getElementById('scan-feed');
+    if(!feed) return;
+    const results = data.results||{};
+    const META = {'morning':{icon:'☀️',label:'Morning Scan'},'pre-market':{icon:'🌅',label:'Pre-Market'},'afternoon':{icon:'🕒',label:'Afternoon Scan'},'after-market':{icon:'🌙',label:'After-Market'},'discovery':{icon:'🔭',label:'Discovery'},'range':{icon:'📈',label:'Range Trader'}};
+    const order = ['morning','pre-market','afternoon','after-market','discovery','range'];
+    const cards = order.filter(k=>results[k]).map(k=>{
+      const res=results[k],meta=META[k]||{icon:'📋',label:k};
+      const t=res.saved_at?new Date(res.saved_at+'Z').toLocaleString('en-US',{timeZone:'America/New_York',hour:'numeric',minute:'2-digit',month:'short',day:'numeric'}):'—';
+      const id='feed-'+k;
+      return '<div class="feed-card"><div class="feed-card-header"><div class="feed-card-type">'+meta.icon+' '+meta.label+'</div><div class="feed-card-time">'+t+' ET</div></div><div class="feed-card-body collapsed" id="'+id+'">'+((res.content||'').replace(/</g,'&lt;').replace(/>/g,'&gt;'))+'</div><button class="feed-expand-btn" onclick="toggleFeed(\''+id+'\',this)">Show full result ▼</button></div>';
+    });
+    feed.innerHTML=cards.length?cards.join(''):'<div style="color:var(--text3);font-size:13px;padding:16px;background:var(--surface);border:1px solid var(--border);border-radius:var(--radius);text-align:center">No scan results yet — run a scan to populate the feed.</div>';
+  } catch(e){console.log('Feed error:',e.message);}
+}
+function toggleFeed(id,btn){const el=document.getElementById(id);if(!el)return;const c=el.classList.toggle('collapsed');btn.textContent=c?'Show full result ▼':'Collapse ▲';}
+async function saveScanResult(scanType,content){
+  if(!scanType||!content)return;
+  const typeMap={'disc-output':'discovery','conv-output':'','range-output':'range'};
+  const mapped=typeMap[scanType]||scanType;
+  if(!mapped)return;
+  try{
+    await fetch(`${API_BASE}/scan-results`,{method:'POST',headers:{'Content-Type':'application/json','x-api-key':API_KEY},body:JSON.stringify({scan_type:mapped,content:content})});
+    if(currentTab==='home')loadScanFeed();
+  }catch(e){console.log('Save scan error:',e.message);}
+}
 function copyPrompt(text){
   try{navigator.clipboard.writeText(text).then(()=>showToast('Prompt copied — paste into Claude.ai','success')).catch(()=>showToast(text));}
   catch(e){showToast(text);}
@@ -678,7 +718,7 @@ async function callClaude(system,message,outputEl,statusEl,btnEl,btnText){
     const sr=await fetch(`${API_BASE}/claude`,{method:'POST',headers:{'Content-Type':'application/json','x-api-key':API_KEY},body:JSON.stringify({system,message,max_tokens:4000})});
     if(!sr.ok)throw new Error('HTTP '+sr.status);
     const{job_id}=await sr.json();
-    while(true){await new Promise(r=>setTimeout(r,3000));const pr=await fetch(`${API_BASE}/claude/result/${job_id}`,{headers:{'x-api-key':API_KEY}});if(!pr.ok)throw new Error('Poll '+pr.status);const job=await pr.json();if(job.status==='done'){outputEl.textContent=job.text||'No response.';statusEl.innerHTML=`✓ Done (${elapsed}s)`;setTimeout(()=>{statusEl.innerHTML='';},4000);break;}else if(job.status==='error')throw new Error(job.text||'Job failed');}
+    while(true){await new Promise(r=>setTimeout(r,3000));const pr=await fetch(`${API_BASE}/claude/result/${job_id}`,{headers:{'x-api-key':API_KEY}});if(!pr.ok)throw new Error('Poll '+pr.status);const job=await pr.json();if(job.status==='done'){outputEl.textContent=job.text||'No response.';statusEl.innerHTML=`✓ Done (${elapsed}s)`;setTimeout(()=>{statusEl.innerHTML='';},4000);saveScanResult(outputEl.id,job.text||'');break;}else if(job.status==='error')throw new Error(job.text||'Job failed');}
   }catch(e){outputEl.textContent='Error: '+e.message;outputEl.classList.add('empty');statusEl.innerHTML='';showToast('Error: '+e.message,'error');}
   finally{clearInterval(si);btnEl.disabled=false;btnEl.textContent=btnText;}
 }
@@ -792,31 +832,8 @@ let toastTimer;
 function showToast(msg,type){const t=document.getElementById('toast');t.textContent=msg;t.className='toast visible'+(type?` ${type}`:'');clearTimeout(toastTimer);toastTimer=setTimeout(()=>{t.className='toast';},2800);}
 function clearTimers(){if(refreshTimer)clearInterval(refreshTimer);cronTimers.forEach(clearInterval);cronTimers=[];}
 
-async function loadCredits(){
-  try {
-    const r = await fetch(`${API_BASE}/credits`, {headers:{'x-api-key':API_KEY}});
-    const data = await r.json();
-    const el = document.getElementById('credits-val');
-    if (!el) return;
-    if (data.status === 'ok' && data.credits_remaining !== null) {
-      const amt = parseFloat(data.credits_remaining);
-      el.textContent = '$' + amt.toFixed(2);
-      el.className = amt > 10 ? 'credits-ok' : amt > 3 ? 'credits-warn' : 'credits-low';
-      if (amt < 3) showToast('⚠️ API credits low: $' + amt.toFixed(2), 'error');
-    } else if (data.status === 'unavailable') {
-      el.textContent = 'N/A';
-      el.title = data.note || 'Billing API not accessible';
-    } else {
-      el.textContent = '?';
-    }
-  } catch(e) {
-    const el = document.getElementById('credits-val');
-    if (el) el.textContent = '?';
-  }
-}
-
 function initDashboard(){
-  loadWatchlist();updateMarketStatus();updateHomeGreeting();loadHomePrices();loadCredits();clearTimers();
+  loadWatchlist();updateMarketStatus();updateHomeGreeting();loadHomePrices();loadScanFeed();clearTimers();
   refreshTimer=setInterval(()=>{if(isMarketOpen()){loadHomePrices();if(currentTab==='watchlist')refreshAll();}},60000);
   cronTimers.push(setInterval(updateMarketStatus,30000));
   cronTimers.push(setInterval(updateHomeGreeting,60000));
