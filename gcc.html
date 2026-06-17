@@ -222,7 +222,7 @@
   .quick-chip { padding: 5px 12px; border-radius: 20px; font-size: 12px; font-family: var(--font); font-weight: 600; background: var(--surface2); border: 1.5px solid var(--border2); color: var(--text2); cursor: pointer; transition: all 0.1s; }
   .quick-chip:hover { border-color: var(--border2); color: var(--text); background: var(--surface3); }
 
-  .ai-output { background: var(--surface2); border: 1px solid var(--border); border-radius: var(--radius); padding: 18px; min-height: 220px; flex: 1; font-family: var(--font); font-size: 13px; line-height: 1.75; color: var(--text2); white-space: pre-wrap; word-break: break-word; overflow-y: auto; }
+  .ai-output { background: var(--surface2); border: 1px solid var(--border); border-radius: var(--radius); padding: 18px; min-height: 220px; flex: 1; font-family: var(--font); font-size: 14px; line-height: 1.8; color: var(--text); white-space: pre-wrap; word-break: break-word; overflow-y: auto; }
   .ai-output.empty { display: flex; align-items: center; justify-content: center; color: var(--text3); font-size: 14px; font-family: var(--sans); }
   .ai-status { font-size: 12px; color: var(--text3); font-family: var(--font); display: flex; align-items: center; gap: 6px; }
   .ai-status .spinner { width: 13px; height: 13px; border: 2px solid var(--border2); border-top-color: var(--blue); border-radius: 50%; animation: spin 0.7s linear infinite; }
@@ -258,6 +258,9 @@
   .toast.error   { background: var(--red); }
   .toast.success { background: var(--green); }
 
+  .credits-ok  { color: var(--green) !important; }
+  .credits-warn { color: var(--amber) !important; }
+  .credits-low  { color: var(--red) !important; }
   /* Scrollbar */
   ::-webkit-scrollbar { width: 4px; }
   ::-webkit-scrollbar-track { background: transparent; }
@@ -315,6 +318,10 @@
     </div>
     <div class="header-right">
       <div class="market-status"><div class="market-dot" id="market-dot"></div><span id="market-label">—</span></div>
+      <div id="credits-display" style="font-size:11px;color:var(--text3);font-family:var(--font);display:flex;align-items:center;gap:4px;padding:4px 8px;background:var(--surface2);border:1px solid var(--border2);border-radius:6px;cursor:default" title="Anthropic API credits remaining">
+        <span style="opacity:0.6">API</span>
+        <span id="credits-val" style="font-weight:600;color:var(--text2)">…</span>
+      </div>
       <button class="lock-btn" onclick="lockDashboard()">🔒</button>
     </div>
   </div>
@@ -550,7 +557,7 @@ function switchTab(tab){
   document.querySelectorAll('.section').forEach(s=>s.classList.remove('active'));
   document.getElementById(`section-${tab}`).classList.add('active');
   if(tab==='conviction')buildQuickPicks();
-  if(tab==='watchlist'&&!Object.keys(priceCache).length)refreshAll();
+  if(tab==='watchlist'){if(Object.keys(priceCache).length){renderList(priceCache);}else{refreshAll();}}
 }
 
 function getET(){return new Date(new Date().toLocaleString('en-US',{timeZone:'America/New_York'}));}
@@ -676,11 +683,66 @@ async function callClaude(system,message,outputEl,statusEl,btnEl,btnText){
   finally{clearInterval(si);btnEl.disabled=false;btnEl.textContent=btnText;}
 }
 
-const DISC_SYSTEM=`You are Gary's supply chain discovery engine.\n\nSTEP 1 — RSI RISING MOMENTUM SCREENER (runs FIRST, before everything else):\nFor every candidate, fetch RSI-14 daily for last 5 sessions from Alpha Vantage.\nSCREEN OUT: RSI flat or falling over 3 sessions, RSI above 65, RSI rising but volume below 20-day avg all 3 sessions.\nSCREEN IN: RSI rising 3+ consecutive sessions + volume above 20-day avg on 2 of 3 days.\nPriority: below 35 rising = HIGHEST, 35-50 rising = STANDARD, 50-65 rising = LOWER.\nTrend gate: must be above 200-day SMA OR showing bullish RSI divergence.\nOnly names passing this screener proceed to discovery filters.\n\nSTEP 2 — HARD FILTERS (all must pass):\n- YTD under 40% | Under 8 analysts | Under $3B cap | Lagging theme 25%+ YTD | Theme confirmed 20%+ YTD\n\nSTEP 3 — PHASE 0 VETTING (7 gates, all mandatory):\n1. Insider selling 2. Balance sheet 3. Analyst coverage/direction 4. Price vs target 5. Legal/dilution overhang 6. Competitive moat 7. Customer concentration\n\nTHEMES: Nuclear, Power Infra/AI Data Centers, Space Supply Chain, Quantum, Memory/Semis, Defense Autonomy, Robotics, any emerging theme with momentum.\nLAYERS: Skip Layer 0 (ETFs, large caps). Layer 2 = sub-component manufacturers. Layer 3 = single-source niche suppliers.\n\nOUTPUT: For each survivor: ticker, what they make, why undiscovered, RSI momentum data, divergence gap, tier. Zero is valid — say so.`;
+const DISC_SYSTEM=`You are Gary's supply chain discovery engine.
 
-const CONV_SYSTEM=`You are Gary's AV conviction scoring engine. Score 1-10.\nSCORING: 9-10=must buy, 7-8=strong buy, 5-6=watch, 3-4=wait, 1-2=avoid.\n\nRSI MOMENTUM SCORING (fetch RSI-14 for last 5 sessions):\n- Rising from below 35 + volume > 20-day avg on 2+ of 3 sessions = +1 conviction\n- Rising from 35-50 + volume confirm = +0.5\n- Rising without volume confirm = neutral\n- Flat = neutral | Falling = -1\n- RSI above 65 for new entry = hard cap max 6\n- Bullish divergence (higher RSI low + lower price low) = +1 regardless of level\nAlways output: RSI MOMENTUM: [value] — [direction, X pts over 3 sessions] | VOLUME CONFIRM: [Y/N] | RSI IMPACT: [+1/+0.5/neutral/-1]\n\nPRE-SCORE PRESSURE TEST (all 7 gates): Volume Gate, Offering Gate, Going Concern, Catalyst Reality, Downside Anchor, Insider Quality, Bear Case.\nScore ceilings: going concern=max 5, below offering=max 7, volume below avg + catalyst=max 6.\n\nEPS: 4/4=+1, 3/4=positive, 2/4=neutral, 0-1/4=-1.\nPEG: <1=Tier 2 ok, 1-2=Tier 2 ok, 2-3=cautious, 3-5=Tier 1 Roth only, >5=avoid.\n\nOUTPUT: metric table, EPS last 4Q, RSI momentum block, full pressure test, CONVICTION SCORE: X/10, verdict (direct, no hedging), bear case, tier, entry/stop/T1/T2, biggest risk.`;
+STEP 1 — RSI SCREENER (runs first, before everything):
+Fetch RSI-14 daily last 5 sessions. Screen OUT: RSI flat/falling, RSI above 65, RSI rising on below-avg volume all 3 sessions. Screen IN: RSI rising 3+ sessions + volume above 20-day avg on 2 of 3 days. Priority: below 35 rising = HIGHEST, 35-50 = STANDARD, 50-65 = LOWER. Must be above 200-day SMA OR show bullish RSI divergence.
 
-const RANGE_SYSTEM=`You are Gary's Range Trader scanner.\n\nRANGE QUALIFICATION — all required:\n- Minimum 3 confirmed touches on support AND 3 on resistance\n- Range width 8-35% | Duration 6+ weeks\n- Volume declining inside range, EXPANDING on support touch (hard gate — must exceed 20-day avg)\n- No earnings within 2 weeks\n\nRSI — DATA POINT ONLY, NOT A GATE:\nNote RSI at the support touch and report it. A slow utility like MSEX may sit at RSI 48 for weeks — that is a valid range trade. Do not kill setups based on RSI direction.\nRSI at support below 40 and turning = ideal. RSI 40-50 = clean. RSI above 55 at support = reduce size. Report bullish divergence if present.\nNEVER skip a setup purely because RSI is not turning up.\n\n7 VETTING GATES: Insider, Balance Sheet, Dilution, Legal, Liquidity (200K+ avg vol), Catalyst, Trend (above 200 SMA or bullish divergence).\n\nOUTPUT per setup: ticker, sector, range structure (support/resistance/width/touches), volume confirm, RSI reading, gates passed, entry zone, stop (3% below support), target (resistance), R/R ratio, tier (Tier 1 Roth, 3-5 week single).`;
+STEP 2 — HARD FILTERS: YTD under 40% | Under 8 analysts | Under $3B cap | Lagging theme 25%+ YTD | Theme confirmed 20%+ YTD.
+
+STEP 3 — PHASE 0 (7 gates): Insider selling | Balance sheet | Analyst coverage/direction | Price vs target | Legal/dilution overhang | Competitive moat | Customer concentration. First kill stops the sequence.
+
+THEMES: Nuclear, Power Infra/AI Data Centers, Space Supply Chain, Quantum, Memory/Semis, Defense Autonomy, Robotics, any theme with momentum today.
+LAYERS: Skip Layer 0 (ETFs, large caps). Layer 2 = sub-components. Layer 3 = single-source niche suppliers.
+
+OUTPUT per survivor: ticker, what they make, why undiscovered, RSI data, divergence gap, tier (Tier 1 Roth or Tier 2 Taxable). Zero survivors is valid.`;
+
+const CONV_SYSTEM=`You are Gary's AV conviction scoring engine. Score 1-10. 9-10=must buy, 7-8=strong buy, 5-6=watch, 3-4=wait, 1-2=avoid.
+
+RSI MOMENTUM (fetch RSI-14 last 5 sessions from Alpha Vantage):
+- Rising from below 35 + volume > 20-day avg on 2+ sessions = +1
+- Rising from 35-50 + volume confirm = +0.5
+- Flat = neutral. Falling = -1. Above 65 for new entry = cap score at 6 max.
+- Bullish divergence (higher RSI low + lower price low) = +1 regardless of level.
+Output: RSI MOMENTUM: [value, direction, pts over 3 sessions] | VOLUME CONFIRM: [Y/N] | RSI IMPACT: [+1/+0.5/neutral/-1]
+
+7 PRESSURE GATES (all required before scoring):
+1. Volume Gate: 10-session trend vs average. Flag if below avg with imminent catalyst (cap 6).
+2. Offering Gate: Last secondary offering price vs current. Flag if below (cap 7).
+3. Going Concern: Any unresolved auditor warning = cap 5.
+4. Catalyst Reality: New info or re-presentation of known data?
+5. Downside Anchor: Actual 52-week low and cash/share.
+6. Insider Quality: Open market buys, % of position, 10b5-1 or not.
+7. Bear Case: 2 sentences — what makes this go down 50%.
+
+EPS: 4/4 beats=+1, 0-1/4=-1. PEG: <2=Tier 2 ok, 3-5=Tier 1 Roth only, >5=avoid.
+
+OUTPUT FORMAT:
+- Metric table (P/E, PEG, analyst target, RSI, 52wk range, volume, mkt cap)
+- EPS last 4 quarters
+- RSI momentum block
+- Full pressure gate results
+- CONVICTION SCORE: X/10
+- Verdict (2-3 direct sentences, no hedging)
+- Bear case
+- Tier placement
+- Entry / Stop / Target 1 / Target 2
+- Biggest single risk`;
+
+const RANGE_SYSTEM=`You are Gary's Range Trader scanner. Find stocks in confirmed technical ranges.
+
+RANGE QUALIFICATION (all required):
+- Minimum 3 confirmed touches on support AND 3 on resistance
+- Range width 8-35% | Duration 6+ weeks established
+- Volume declining inside range, EXPANDING on support touch (hard gate — must exceed 20-day avg)
+- No earnings within 2 weeks
+
+RSI — DATA POINT ONLY, NEVER A GATE:
+Report RSI at the support touch. Slow stocks (utilities, energy, financials) may sit at RSI 48 for weeks — that is a valid range trade. Never kill a setup because RSI isn't turning up. Note RSI value, whether it's at/near support, and flag bullish divergence if present.
+
+7 VETTING GATES: Insider (no net selling >40% in 60 days) | Balance sheet (current ratio >1, no going concern) | Dilution (no active ATM >10% float) | Legal (no class action/SEC) | Liquidity (200K+ avg daily vol) | Catalyst (no binary event <2 weeks) | Trend (above 200 SMA or bullish divergence).
+
+OUTPUT per setup: ticker, sector, support/resistance levels, touch counts, range width%, volume confirm, RSI reading, gates passed, entry zone, stop (3% below support), target (resistance), R/R ratio, tier (Tier 1 Roth — 3-5 week single).`;
 
 async function runDiscovery(){document.getElementById('disc-add-row').classList.remove('visible');const today=new Date().toLocaleDateString('en-US',{weekday:'long',year:'numeric',month:'long',day:'numeric'});await callClaude(DISC_SYSTEM,`Run supply chain discovery for ${today}. RSI momentum screener first. Find Layer 2 and Layer 3 names with momentum. Apply all filters and Phase 0 gates. Surface only survivors.`,document.getElementById('disc-output'),document.getElementById('disc-status'),document.getElementById('disc-btn'),'Run Discovery ↗');showDiscChips(document.getElementById('disc-output').textContent);}
 
@@ -730,8 +792,31 @@ let toastTimer;
 function showToast(msg,type){const t=document.getElementById('toast');t.textContent=msg;t.className='toast visible'+(type?` ${type}`:'');clearTimeout(toastTimer);toastTimer=setTimeout(()=>{t.className='toast';},2800);}
 function clearTimers(){if(refreshTimer)clearInterval(refreshTimer);cronTimers.forEach(clearInterval);cronTimers=[];}
 
+async function loadCredits(){
+  try {
+    const r = await fetch(`${API_BASE}/credits`, {headers:{'x-api-key':API_KEY}});
+    const data = await r.json();
+    const el = document.getElementById('credits-val');
+    if (!el) return;
+    if (data.status === 'ok' && data.credits_remaining !== null) {
+      const amt = parseFloat(data.credits_remaining);
+      el.textContent = '$' + amt.toFixed(2);
+      el.className = amt > 10 ? 'credits-ok' : amt > 3 ? 'credits-warn' : 'credits-low';
+      if (amt < 3) showToast('⚠️ API credits low: $' + amt.toFixed(2), 'error');
+    } else if (data.status === 'unavailable') {
+      el.textContent = 'N/A';
+      el.title = data.note || 'Billing API not accessible';
+    } else {
+      el.textContent = '?';
+    }
+  } catch(e) {
+    const el = document.getElementById('credits-val');
+    if (el) el.textContent = '?';
+  }
+}
+
 function initDashboard(){
-  loadWatchlist();updateMarketStatus();updateHomeGreeting();loadHomePrices();clearTimers();
+  loadWatchlist();updateMarketStatus();updateHomeGreeting();loadHomePrices();loadCredits();clearTimers();
   refreshTimer=setInterval(()=>{if(isMarketOpen()){loadHomePrices();if(currentTab==='watchlist')refreshAll();}},60000);
   cronTimers.push(setInterval(updateMarketStatus,30000));
   cronTimers.push(setInterval(updateHomeGreeting,60000));
