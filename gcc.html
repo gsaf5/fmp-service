@@ -640,28 +640,37 @@ const SCAN_WINDOWS = [
 const WEEKEND_DEFAULT = 'discovery';
 
 function getCurrentScanWindow(){
-  const et=getET(), h=et.getHours(), m=et.getMinutes(), d=et.getDay();
+  // getET() already returns time in ET via toLocaleString conversion
+  const et=getET();
+  const h=et.getHours(), m=et.getMinutes(), d=et.getDay();
   const mins=h*60+m;
+  console.log('GCC time check: ET='+h+':'+String(m).padStart(2,'0')+' day='+d+' mins='+mins);
   if(d===0||d===6) return SCAN_WINDOWS.find(w=>w.type===WEEKEND_DEFAULT);
   for(const w of SCAN_WINDOWS){
-    if(mins>=w.startH*60+w.startM && mins<w.endH*60+w.endM) return w;
+    const wStart=w.startH*60+w.startM, wEnd=w.endH*60+w.endM;
+    if(mins>=wStart && mins<wEnd){
+      console.log('GCC window matched: '+w.type);
+      return w;
+    }
   }
-  return SCAN_WINDOWS[SCAN_WINDOWS.length-1]; // default after-market
+  console.log('GCC window: defaulting to after-market');
+  return SCAN_WINDOWS[SCAN_WINDOWS.length-1];
 }
 
-function isResultFresh(savedAt, window){
+function isResultFresh(savedAt, win){
   if(!savedAt) return false;
-  const et=getET();
-  const saved=new Date(savedAt+'Z');
-  // Convert saved time to ET
-  const savedET=new Date(saved.toLocaleString('en-US',{timeZone:'America/New_York'}));
+  const now=getET();
+  // Parse saved_at (Railway returns UTC ISO string without Z sometimes)
+  const savedRaw=savedAt.endsWith('Z')?savedAt:savedAt+'Z';
+  const savedET=new Date(new Date(savedRaw).toLocaleString('en-US',{timeZone:'America/New_York'}));
   const savedMins=savedET.getHours()*60+savedET.getMinutes();
-  const nowMins=et.getHours()*60+et.getMinutes();
-  const windowStart=window.startH*60+window.startM;
-  const windowEnd=window.endH*60+window.endM;
-  // Same calendar day AND saved within current window
-  const sameDay = savedET.toDateString()===et.toDateString();
-  return sameDay && savedMins>=windowStart && savedMins<windowEnd;
+  const nowMins=now.getHours()*60+now.getMinutes();
+  const winStart=win.startH*60+win.startM;
+  const winEnd=win.endH*60+win.endM;
+  const sameDay=savedET.toDateString()===now.toDateString();
+  const savedInWindow=savedMins>=winStart && savedMins<winEnd;
+  const nowInWindow=nowMins>=winStart && nowMins<winEnd;
+  return sameDay && savedInWindow && nowInWindow;
 }
 
 const SCAN_SYSTEM_PROMPTS = {
@@ -686,31 +695,48 @@ async function runHomeAutoScan(window){
   const system=SCAN_SYSTEM_PROMPTS[window.type]||SCAN_SYSTEM_PROMPTS['morning'];
   const today=new Date().toLocaleDateString('en-US',{weekday:'long',year:'numeric',month:'long',day:'numeric'});
 
-  try{
-    const sr=await fetch(`${API_BASE}/claude`,{method:'POST',headers:{'Content-Type':'application/json','x-api-key':API_KEY},body:JSON.stringify({system,message:`${window.label} for ${today}. Run the full scan now.`,max_tokens:4000})});
-    if(!sr.ok) throw new Error('HTTP '+sr.status);
-    const {job_id}=await sr.json();
-    let elapsed=0;
-    while(true){
-      await new Promise(r=>setTimeout(r,3000));
-      elapsed+=3;
-      if(textEl) textEl.textContent='Running '+window.label+'… '+elapsed+'s';
-      const pr=await fetch(`${API_BASE}/claude/result/${job_id}`,{headers:{'x-api-key':API_KEY}});
-      if(!pr.ok) throw new Error('Poll '+pr.status);
-      const job=await pr.json();
-      if(job.status==='done'){
+  // Retry up to 2 times on 429
+  let attempt=0;
+  while(attempt<3){
+    attempt++;
+    try{
+      if(attempt>1){
+        const waitSec=attempt*15;
+        if(textEl) textEl.textContent='Rate limit — retrying in '+waitSec+'s…';
+        await new Promise(r=>setTimeout(r,waitSec*1000));
+        if(textEl) textEl.textContent='Running '+window.label+'… (attempt '+attempt+')';
+      }
+      const sr=await fetch(`${API_BASE}/claude`,{method:'POST',headers:{'Content-Type':'application/json','x-api-key':API_KEY},body:JSON.stringify({system,message:`${window.label} for ${today}. Run the full scan now.`,max_tokens:4000})});
+      if(sr.status===429){
+        if(attempt<3) continue;
+        throw new Error('Rate limited — try again in a minute');
+      }
+      if(!sr.ok) throw new Error('HTTP '+sr.status);
+      const {job_id}=await sr.json();
+      let elapsed=0;
+      while(true){
+        await new Promise(r=>setTimeout(r,3000));
+        elapsed+=3;
+        if(textEl) textEl.textContent='Running '+window.label+'… '+elapsed+'s';
+        const pr=await fetch(`${API_BASE}/claude/result/${job_id}`,{headers:{'x-api-key':API_KEY}});
+        if(!pr.ok) throw new Error('Poll '+pr.status);
+        const job=await pr.json();
+        if(job.status==='done'){
+          if(spinner) spinner.style.display='none';
+          showFeedResult(window, job.text||'No response.');
+          await saveScanResult(window.type, job.text||'');
+          attempt=99; break; // success — exit retry loop
+        } else if(job.status==='error'){
+          throw new Error(job.text||'Scan failed');
+        }
+      }
+      break;
+    } catch(e){
+      if(attempt>=3){
         if(spinner) spinner.style.display='none';
-        showFeedResult(window, job.text||'No response.');
-        // Save to Railway
-        await saveScanResult(window.type, job.text||'');
-        break;
-      } else if(job.status==='error'){
-        throw new Error(job.text||'Scan failed');
+        if(content) content.innerHTML='<div class="feed-empty">Scan error: '+e.message+'</div>';
       }
     }
-  } catch(e){
-    if(spinner) spinner.style.display='none';
-    if(content) content.innerHTML='<div class="feed-empty">Scan error: '+e.message+'</div>';
   }
 }
 
