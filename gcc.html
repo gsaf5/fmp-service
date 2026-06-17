@@ -89,32 +89,35 @@
   .feed-expand-btn { width: 100%; padding: 8px; background: var(--surface2); border: none; border-top: 1px solid var(--border); font-size: 12px; color: var(--blue); cursor: pointer; font-family: var(--sans); font-weight: 600; }
   .feed-expand-btn:hover { background: var(--surface3); }
   /* HOME */
-  .home-wrap { padding: 16px; flex: 1; overflow-y: auto; max-width: 900px; margin: 0 auto; width: 100%; }
-  .home-greeting { font-size: 15px; color: var(--text2); margin-bottom: 18px; line-height: 1.5; }
+  .home-wrap { padding: 16px; flex: 1; overflow-y: auto; width: 100%; }
+  .home-greeting { font-size: 15px; color: var(--text2); margin-bottom: 14px; line-height: 1.5; }
   .home-greeting strong { color: var(--text); }
 
-  .scan-group-label { font-size: 11px; font-weight: 600; color: var(--text3); text-transform: uppercase; letter-spacing: 0.08em; margin: 20px 0 10px; padding-bottom: 6px; border-bottom: 1px solid var(--border); }
-  .scan-group-label:first-of-type { margin-top: 0; }
+  /* 3-column layout */
+  .home-3col { display: grid; grid-template-columns: 220px 1fr 220px; gap: 14px; align-items: start; }
+  @media (max-width: 900px) { .home-3col { grid-template-columns: 1fr 1fr; } .home-col-center { grid-column: 1 / -1; order: -1; } }
+  @media (max-width: 600px) { .home-3col { grid-template-columns: 1fr; } }
 
-  .scan-grid-4 { display: grid; grid-template-columns: repeat(4, 1fr); gap: 10px; }
-  @media (max-width: 600px) { .scan-grid-4 { grid-template-columns: repeat(2, 1fr); } }
+  .home-col {}
+  .home-col-label { font-size: 11px; font-weight: 600; color: var(--text3); text-transform: uppercase; letter-spacing: 0.08em; margin-bottom: 8px; padding-bottom: 5px; border-bottom: 1px solid var(--border); }
+  .home-col-side {}
+  .home-col-center {}
 
-  .scan-btn { display: flex; flex-direction: column; gap: 4px; padding: 14px 14px; border-radius: var(--radius); border: 1.5px solid; cursor: pointer; background: var(--surface); text-align: left; transition: all 0.15s; width: 100%; box-shadow: 0 1px 3px rgba(0,0,0,0.05); }
-  .scan-btn:hover { transform: translateY(-1px); box-shadow: 0 3px 8px rgba(0,0,0,0.1); }
-  .scan-btn:active { transform: scale(0.98); box-shadow: none; }
-  .scan-btn-icon { font-size: 20px; margin-bottom: 2px; }
-  .scan-btn-label { font-size: 14px; font-weight: 600; color: inherit; }
-  .scan-btn-sub   { font-size: 11px; opacity: 0.65; }
+  .home-panel { background: var(--surface); border: 1px solid var(--border); border-radius: var(--radius); padding: 12px 14px; box-shadow: 0 1px 3px rgba(0,0,0,0.04); }
 
-  .btn-blue   { border-color: rgba(29,78,216,0.35);   color: var(--blue);   background: var(--blue-bg); }
-  .btn-yellow { border-color: rgba(113,63,18,0.3);    color: var(--yellow); background: var(--yellow-bg); }
-  .btn-white  { border-color: var(--border2);          color: var(--text);   background: var(--surface); }
+  /* Feed */
+  .feed-empty { color: var(--text3); font-size: 13px; padding: 24px 16px; background: var(--surface); border: 1px solid var(--border); border-radius: var(--radius); text-align: center; }
+  .feed-result { background: var(--surface); border: 1px solid var(--border); border-radius: var(--radius); overflow: hidden; }
+  .feed-result-header { display: flex; align-items: center; justify-content: space-between; padding: 10px 14px; background: var(--surface2); border-bottom: 1px solid var(--border); }
+  .feed-result-type { font-size: 13px; font-weight: 700; color: var(--text); }
+  .feed-result-time { font-size: 11px; color: var(--text3); font-family: var(--font); }
+  .feed-result-body { padding: 14px; font-family: var(--font); font-size: 13px; line-height: 1.8; color: var(--text); white-space: pre-wrap; word-break: break-word; overflow-y: auto; max-height: calc(100vh - 280px); }
 
-  /* Home panels */
-  .home-panels { display: grid; grid-template-columns: 1fr 1fr; gap: 14px; margin-top: 6px; }
-  @media (max-width: 600px) { .home-panels { grid-template-columns: 1fr; } }
-  .home-panel { background: var(--surface); border: 1px solid var(--border); border-radius: var(--radius); padding: 14px 16px; box-shadow: 0 1px 3px rgba(0,0,0,0.04); }
-  .home-panel-title { font-size: 11px; font-weight: 600; color: var(--text3); text-transform: uppercase; letter-spacing: 0.08em; margin-bottom: 12px; }
+  /* Spinner */
+  .feed-spinner { display: flex; align-items: center; justify-content: center; padding: 48px 16px; background: var(--surface); border: 1px solid var(--border); border-radius: var(--radius); }
+  .feed-spinner-inner { display: flex; flex-direction: column; align-items: center; gap: 14px; }
+  .spinner-ring { width: 32px; height: 32px; border: 3px solid var(--border2); border-top-color: var(--blue); border-radius: 50%; animation: spin 0.8s linear infinite; }
+  #feed-spinner-text { font-size: 13px; color: var(--text3); font-family: var(--font); }
 
   .price-row { display: flex; justify-content: space-between; align-items: center; padding: 7px 0; border-bottom: 1px solid var(--border); }
   .price-row:last-child { border-bottom: none; }
@@ -332,54 +335,46 @@
   <div class="section home active" id="section-home">
     <div class="home-wrap">
       <div class="home-greeting" id="home-greeting">Loading…</div>
+      <div class="home-3col">
 
-      <div class="scan-group-label">Daily scans</div>
-      <div class="scan-grid-4">
-        <button class="scan-btn btn-blue" onclick="copyPrompt('Run pre-market scan, desktop')">
-          <span class="scan-btn-icon">🌅</span><span class="scan-btn-label">Pre-Market</span><span class="scan-btn-sub">7:30 AM · movers</span>
-        </button>
-        <button class="scan-btn btn-blue" onclick="copyPrompt('Run morning scan, desktop')">
-          <span class="scan-btn-icon">☀️</span><span class="scan-btn-label">Morning Scan</span><span class="scan-btn-sub">9:45 AM · full intel</span>
-        </button>
-        <button class="scan-btn btn-blue" onclick="copyPrompt('Run afternoon scan, desktop')">
-          <span class="scan-btn-icon">🕒</span><span class="scan-btn-label">Afternoon Scan</span><span class="scan-btn-sub">3:15 PM · close prep</span>
-        </button>
-        <button class="scan-btn btn-blue" onclick="copyPrompt('Run pre-earnings radar, desktop')">
-          <span class="scan-btn-icon">📡</span><span class="scan-btn-label">Earnings Radar</span><span class="scan-btn-sub">Pre-earnings setups</span>
-        </button>
-        <button class="scan-btn btn-blue" onclick="copyPrompt('Run after-market scan, desktop')">
-          <span class="scan-btn-icon">🌙</span><span class="scan-btn-label">After-Market</span><span class="scan-btn-sub">Post-close · movers</span>
-        </button>
-      </div>
-
-      <div class="scan-group-label" style="margin-top:20px">Intelligence feed — latest scan results</div>
-      <div id="scan-feed" style="display:flex;flex-direction:column;gap:10px">
-        <div style="color:var(--text3);font-size:13px;padding:16px;background:var(--surface);border:1px solid var(--border);border-radius:var(--radius);text-align:center">No scan results yet — run a scan to populate the feed.</div>
-      </div>
-
-      <div class="home-panels" style="margin-top:20px">
-        <div>
-          <div class="scan-group-label">Key holdings — live prices</div>
+        <!-- LEFT: Live prices -->
+        <div class="home-col home-col-side">
+          <div class="home-col-label">Key holdings</div>
           <div class="home-panel">
             <div id="home-prices"><div class="price-loading">Fetching…</div></div>
           </div>
+          <div class="home-refresh-row" style="margin-top:8px">
+            <button class="home-refresh-btn" onclick="loadHomePrices()">↺ Refresh</button>
+            <div class="home-updated" id="home-updated">—</div>
+          </div>
         </div>
-        <div>
-          <div class="scan-group-label">Watchlist — zone status</div>
+
+        <!-- CENTER: Intelligence feed -->
+        <div class="home-col home-col-center">
+          <div class="home-col-label" id="feed-label">Intelligence feed</div>
+          <div id="scan-feed">
+            <div class="feed-spinner" id="feed-spinner" style="display:none">
+              <div class="feed-spinner-inner"><div class="spinner-ring"></div><div id="feed-spinner-text">Loading…</div></div>
+            </div>
+            <div id="feed-content">
+              <div class="feed-empty">Opening GCC — determining scan…</div>
+            </div>
+          </div>
+        </div>
+
+        <!-- RIGHT: Zone status -->
+        <div class="home-col home-col-side">
+          <div class="home-col-label">Zone status</div>
           <div class="home-panel">
             <div id="home-zones"><div class="price-loading">Fetching…</div></div>
           </div>
         </div>
-      </div>
 
-      <div class="home-refresh-row">
-        <button class="home-refresh-btn" onclick="loadHomePrices()">↺ Refresh prices</button>
-        <div class="home-updated" id="home-updated">—</div>
       </div>
     </div>
   </div>
 
-  <!-- WATCHLIST -->
+    <!-- WATCHLIST -->
   <div class="section watchlist" id="section-watchlist">
     <div class="toolbar">
       <div class="toolbar-left">
@@ -631,35 +626,128 @@ async function loadHomePrices(){
   document.getElementById('home-updated').textContent=`Updated ${et} ET`;
 }
 
-async function loadScanFeed(){
-  try {
-    const r = await fetch(`${API_BASE}/scan-results`,{headers:{'x-api-key':API_KEY}});
-    const data = await r.json();
-    const feed = document.getElementById('scan-feed');
-    if(!feed) return;
-    const results = data.results||{};
-    const META = {'morning':{icon:'☀️',label:'Morning Scan'},'pre-market':{icon:'🌅',label:'Pre-Market'},'afternoon':{icon:'🕒',label:'Afternoon Scan'},'after-market':{icon:'🌙',label:'After-Market'},'discovery':{icon:'🔭',label:'Discovery'},'range':{icon:'📈',label:'Range Trader'}};
-    const order = ['morning','pre-market','afternoon','after-market','discovery','range'];
-    const cards = order.filter(k=>results[k]).map(k=>{
-      const res=results[k],meta=META[k]||{icon:'📋',label:k};
-      const t=res.saved_at?new Date(res.saved_at+'Z').toLocaleString('en-US',{timeZone:'America/New_York',hour:'numeric',minute:'2-digit',month:'short',day:'numeric'}):'—';
-      const id='feed-'+k;
-      return '<div class="feed-card"><div class="feed-card-header"><div class="feed-card-type">'+meta.icon+' '+meta.label+'</div><div class="feed-card-time">'+t+' ET</div></div><div class="feed-card-body collapsed" id="'+id+'">'+((res.content||'').replace(/</g,'&lt;').replace(/>/g,'&gt;'))+'</div><button class="feed-expand-btn" onclick="toggleFeed(\''+id+'\',this)">Show full result ▼</button></div>';
-    });
-    feed.innerHTML=cards.length?cards.join(''):'<div style="color:var(--text3);font-size:13px;padding:16px;background:var(--surface);border:1px solid var(--border);border-radius:var(--radius);text-align:center">No scan results yet — run a scan to populate the feed.</div>';
-  } catch(e){console.log('Feed error:',e.message);}
+// ── HOME INTELLIGENCE FEED ──────────────────────────────────────────────────
+
+const SCAN_WINDOWS = [
+  {type:'pre-market',   label:'Pre-Market',    icon:'🌅', startH:7,  startM:0,  endH:9,  endM:30},
+  {type:'morning',      label:'Morning Scan',  icon:'☀️', startH:9,  startM:30, endH:11, endM:0},
+  {type:'discovery',    label:'Discovery',     icon:'🔭', startH:11, startM:0,  endH:14, endM:30},
+  {type:'afternoon',    label:'Afternoon Scan',icon:'🕒', startH:14, startM:30, endH:16, endM:15},
+  {type:'after-market', label:'After-Market',  icon:'🌙', startH:16, startM:15, endH:23, endM:59},
+];
+const WEEKEND_DEFAULT = 'discovery';
+
+function getCurrentScanWindow(){
+  const et=getET(), h=et.getHours(), m=et.getMinutes(), d=et.getDay();
+  const mins=h*60+m;
+  if(d===0||d===6) return SCAN_WINDOWS.find(w=>w.type===WEEKEND_DEFAULT);
+  for(const w of SCAN_WINDOWS){
+    if(mins>=w.startH*60+w.startM && mins<w.endH*60+w.endM) return w;
+  }
+  return SCAN_WINDOWS[SCAN_WINDOWS.length-1]; // default after-market
 }
-function toggleFeed(id,btn){const el=document.getElementById(id);if(!el)return;const c=el.classList.toggle('collapsed');btn.textContent=c?'Show full result ▼':'Collapse ▲';}
-async function saveScanResult(scanType,content){
-  if(!scanType||!content)return;
-  const typeMap={'disc-output':'discovery','conv-output':'','range-output':'range'};
-  const mapped=typeMap[scanType]||scanType;
-  if(!mapped)return;
+
+function isResultFresh(savedAt, window){
+  if(!savedAt) return false;
+  const et=getET();
+  const saved=new Date(savedAt+'Z');
+  // Convert saved time to ET
+  const savedET=new Date(saved.toLocaleString('en-US',{timeZone:'America/New_York'}));
+  const savedMins=savedET.getHours()*60+savedET.getMinutes();
+  const nowMins=et.getHours()*60+et.getMinutes();
+  const windowStart=window.startH*60+window.startM;
+  const windowEnd=window.endH*60+window.endM;
+  // Same calendar day AND saved within current window
+  const sameDay = savedET.toDateString()===et.toDateString();
+  return sameDay && savedMins>=windowStart && savedMins<windowEnd;
+}
+
+const SCAN_SYSTEM_PROMPTS = {
+  'pre-market': `You are Gary's pre-market scanner. It is pre-market (before 9:30 AM ET). Identify the top pre-market movers across the full market — who's up, who's down, why, and whether any move is a Roth Tier 1 opportunity to act on at the open. Check RKLB, ASTS, NVDA, META, NFLX, ORCL, DVN, NOC from Gary's holdings for any pre-market moves. Be lean, fast, actionable. Flag any setup worth acting on before or at the open.`,
+  'morning': `You are Gary's morning scan engine. Run the full morning market intelligence briefing. Cover: (1) overnight news and macro, (2) any holdings with notable moves or news — RKLB, ASTS, NVDA, NVDL, META, NFLX, ORCL, DVN, NOC, AMT, AGNC, QQQ, (3) any new opportunities worth flagging, (4) RSI momentum — any names with RSI rising 3+ sessions from below 50, (5) what to watch today. Be direct and actionable.`,
+  'discovery': `You are Gary's supply chain discovery engine. RSI SCREENER FIRST: Only candidates with RSI rising 3+ sessions + volume above 20-day avg on 2 of 3 days proceed. Priority: below 35 rising = HIGHEST. Must be above 200 SMA or show bullish divergence. HARD FILTERS: YTD under 40%, under 8 analysts, under $3B cap, lagging theme 25%+ YTD. PHASE 0: 7 gates — insider, balance sheet, analyst, price vs target, legal/dilution, moat, customer concentration. THEMES: Nuclear, Power/AI Data Centers, Space Supply Chain, Quantum, Memory/Semis, Defense Autonomy, Robotics. Layer 2/3 only. Output: ticker, what they make, why undiscovered, RSI data, tier. Zero is valid.`,
+  'afternoon': `You are Gary's afternoon scan engine (3:15 PM ET — 45 min before close). Cover: (1) what developed today vs this morning, (2) any holdings to act on before close — RKLB, ASTS, NVDA, META, NFLX, DVN, NOC, (3) any new afternoon opportunities from options activity or news, (4) overnight research queue with priority levels, (5) anything to do before the 4 PM mutual fund NAV cutoff. Direct and actionable.`,
+  'after-market': `You are Gary's after-market scanner. Market is closed. Cover: (1) any earnings reports after close from holdings or watchlist, (2) notable after-hours movers, (3) any news overnight that changes tomorrow's setup, (4) what to prep for tomorrow's pre-market. Holdings to check: RKLB, ASTS, NVDA, META, NFLX, ORCL, DVN, NOC, AMT, AGNC. Be concise.`,
+};
+
+async function runHomeAutoScan(window){
+  const spinner=document.getElementById('feed-spinner');
+  const content=document.getElementById('feed-content');
+  const labelEl=document.getElementById('feed-label');
+  const textEl=document.getElementById('feed-spinner-text');
+
+  if(labelEl) labelEl.textContent=window.icon+' '+window.label;
+  if(content) content.innerHTML='';
+  if(spinner){spinner.style.display='flex';}
+  if(textEl) textEl.textContent='Running '+window.label+'…';
+
+  const system=SCAN_SYSTEM_PROMPTS[window.type]||SCAN_SYSTEM_PROMPTS['morning'];
+  const today=new Date().toLocaleDateString('en-US',{weekday:'long',year:'numeric',month:'long',day:'numeric'});
+
   try{
-    await fetch(`${API_BASE}/scan-results`,{method:'POST',headers:{'Content-Type':'application/json','x-api-key':API_KEY},body:JSON.stringify({scan_type:mapped,content:content})});
-    if(currentTab==='home')loadScanFeed();
-  }catch(e){console.log('Save scan error:',e.message);}
+    const sr=await fetch(`${API_BASE}/claude`,{method:'POST',headers:{'Content-Type':'application/json','x-api-key':API_KEY},body:JSON.stringify({system,message:`${window.label} for ${today}. Run the full scan now.`,max_tokens:4000})});
+    if(!sr.ok) throw new Error('HTTP '+sr.status);
+    const {job_id}=await sr.json();
+    let elapsed=0;
+    while(true){
+      await new Promise(r=>setTimeout(r,3000));
+      elapsed+=3;
+      if(textEl) textEl.textContent='Running '+window.label+'… '+elapsed+'s';
+      const pr=await fetch(`${API_BASE}/claude/result/${job_id}`,{headers:{'x-api-key':API_KEY}});
+      if(!pr.ok) throw new Error('Poll '+pr.status);
+      const job=await pr.json();
+      if(job.status==='done'){
+        if(spinner) spinner.style.display='none';
+        showFeedResult(window, job.text||'No response.');
+        // Save to Railway
+        await saveScanResult(window.type, job.text||'');
+        break;
+      } else if(job.status==='error'){
+        throw new Error(job.text||'Scan failed');
+      }
+    }
+  } catch(e){
+    if(spinner) spinner.style.display='none';
+    if(content) content.innerHTML='<div class="feed-empty">Scan error: '+e.message+'</div>';
+  }
 }
+
+function showFeedResult(window, text){
+  const content=document.getElementById('feed-content');
+  const labelEl=document.getElementById('feed-label');
+  if(labelEl) labelEl.textContent=window.icon+' '+window.label;
+  if(!content) return;
+  const now=getET().toLocaleTimeString('en-US',{hour:'numeric',minute:'2-digit',timeZone:'America/New_York'});
+  content.innerHTML='<div class="feed-result"><div class="feed-result-header"><div class="feed-result-type">'+window.icon+' '+window.label+'</div><div class="feed-result-time">'+now+' ET</div></div><div class="feed-result-body">'+text.replace(/</g,'&lt;').replace(/>/g,'&gt;')+'</div></div>';
+}
+
+async function initHomeFeed(){
+  const window=getCurrentScanWindow();
+  if(!window) return;
+  const labelEl=document.getElementById('feed-label');
+  if(labelEl) labelEl.textContent=window.icon+' '+window.label;
+  try{
+    const r=await fetch(`${API_BASE}/scan-results`,{headers:{'x-api-key':API_KEY}});
+    const data=await r.json();
+    const stored=(data.results||{})[window.type];
+    if(stored && isResultFresh(stored.saved_at, window)){
+      showFeedResult(window, stored.content||'');
+      return;
+    }
+  } catch(e){ console.log('Feed cache check error:',e.message); }
+  // No fresh result — run the scan
+  runHomeAutoScan(window);
+}
+
+async function loadScanFeed(){ await initHomeFeed(); }
+
+async function saveScanResult(scanType,content){
+  if(!scanType||!content) return;
+  try{
+    await fetch(`${API_BASE}/scan-results`,{method:'POST',headers:{'Content-Type':'application/json','x-api-key':API_KEY},body:JSON.stringify({scan_type:scanType,content:content})});
+  } catch(e){ console.log('Save error:',e.message); }
+}
+
 function copyPrompt(text){
   try{navigator.clipboard.writeText(text).then(()=>showToast('Prompt copied — paste into Claude.ai','success')).catch(()=>showToast(text));}
   catch(e){showToast(text);}
