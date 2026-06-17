@@ -563,7 +563,7 @@ function switchTab(tab){
   const at=document.querySelector(`.nav-tab.${tab}`);if(at)at.classList.add('active');
   document.querySelectorAll('.section').forEach(s=>s.classList.remove('active'));
   document.getElementById(`section-${tab}`).classList.add('active');
-  if(tab==='home'){loadScanFeed();loadHomePrices();}
+  if(tab==='home'){initHomeFeed();loadHomePrices();}
   if(tab==='conviction')buildQuickPicks();
   if(tab==='watchlist'){if(Object.keys(priceCache).length){renderList(priceCache);}else{refreshAll();}}
 }
@@ -740,6 +740,118 @@ async function runHomeAutoScan(window){
   }
 }
 
+function showFeedResult(win, text, savedAt){
+  const content=document.getElementById('feed-content');
+  const labelEl=document.getElementById('feed-label');
+  if(labelEl) labelEl.textContent=win.icon+' '+win.label;
+  if(!content) return;
+  let timeStr='';
+  if(savedAt){
+    const raw=savedAt.endsWith('Z')?savedAt:savedAt+'Z';
+    timeStr=new Date(raw).toLocaleString('en-US',{timeZone:'America/New_York',hour:'numeric',minute:'2-digit',month:'short',day:'numeric'})+' ET';
+  }
+  const escaped=text.replace(/</g,'&lt;').replace(/>/g,'&gt;');
+  const fresh=savedAt&&isResultFresh(savedAt,win);
+  const staleNote=fresh?'':'<span style="font-size:10px;color:var(--amber);font-family:var(--font);margin-left:8px">stale</span>';
+  const lbl=win.label;
+  content.innerHTML=
+    '<div class="feed-result">'+
+    '<div class="feed-result-header">'+
+      '<div class="feed-result-type">'+win.icon+' '+lbl+' '+staleNote+'</div>'+
+      '<div class="feed-result-time">'+timeStr+'</div>'+
+    '</div>'+
+    '<div class="feed-result-body" id="feed-result-body">'+escaped+'</div>'+
+    '<div style="display:flex;gap:0;border-top:1px solid var(--border)">'+
+      '<button class="discuss-btn" style="flex:1;border-right:1px solid var(--border)" onclick="handleDiscuss()">'+
+        '\u{1F4AC} Discuss in Claude.ai \u2197</button>'+
+      '<button class="discuss-btn" style="flex:1;color:var(--green)" onclick="manualRunScan()">'+
+        '\u21ba Run fresh scan</button>'+
+    '</div></div>';
+  // Store label for discuss handler
+  window._currentFeedLabel=lbl;
+}
+
+function handleDiscuss(){
+  const el=document.getElementById('feed-result-body');
+  if(el) discussInClaude(window._currentFeedLabel||'Scan', el.innerText);
+}
+
+function showRunButton(win){
+  const content=document.getElementById('feed-content');
+  if(!content) return;
+  const lbl=win.label;
+  content.innerHTML=
+    '<div style="background:var(--surface);border:1px solid var(--border);border-radius:var(--radius);padding:32px 16px;text-align:center">'+
+    '<div style="font-size:32px;margin-bottom:12px">'+win.icon+'</div>'+
+    '<div style="font-size:16px;font-weight:700;color:var(--text);margin-bottom:6px">'+lbl+'</div>'+
+    '<div style="font-size:13px;color:var(--text3);margin-bottom:20px">No result cached for this window.</div>'+
+    '<button onclick="manualRunScan()" style="background:var(--blue);color:#fff;border:none;border-radius:10px;padding:12px 28px;font-size:15px;font-weight:700;cursor:pointer;font-family:var(--sans)">Run '+lbl+' \u2197</button>'+
+    '</div>';
+}
+
+async function manualRunScan(){
+  const win=getCurrentScanWindow();
+  if(win) runHomeAutoScan(win);
+}
+async function runHomeAutoScan(window){
+  const spinner=document.getElementById('feed-spinner');
+  const content=document.getElementById('feed-content');
+  const labelEl=document.getElementById('feed-label');
+  const textEl=document.getElementById('feed-spinner-text');
+
+  if(labelEl) labelEl.textContent=window.icon+' '+window.label;
+  if(content) content.innerHTML='';
+  if(spinner){spinner.style.display='flex';}
+  if(textEl) textEl.textContent='Running '+window.label+'…';
+
+  const system=SCAN_SYSTEM_PROMPTS[window.type]||SCAN_SYSTEM_PROMPTS['morning'];
+  const today=new Date().toLocaleDateString('en-US',{weekday:'long',year:'numeric',month:'long',day:'numeric'});
+
+  // Retry up to 2 times on 429
+  let attempt=0;
+  while(attempt<3){
+    attempt++;
+    try{
+      if(attempt>1){
+        const waitSec=attempt*15;
+        if(textEl) textEl.textContent='Rate limit — retrying in '+waitSec+'s…';
+        await new Promise(r=>setTimeout(r,waitSec*1000));
+        if(textEl) textEl.textContent='Running '+window.label+'… (attempt '+attempt+')';
+      }
+      const sr=await fetch(`${API_BASE}/claude`,{method:'POST',headers:{'Content-Type':'application/json','x-api-key':API_KEY},body:JSON.stringify({system,message:`${window.label} for ${today}. Run the full scan now.`,max_tokens:4000})});
+      if(sr.status===429){
+        if(attempt<3) continue;
+        throw new Error('Rate limited — try again in a minute');
+      }
+      if(!sr.ok) throw new Error('HTTP '+sr.status);
+      const {job_id}=await sr.json();
+      let elapsed=0;
+      while(true){
+        await new Promise(r=>setTimeout(r,3000));
+        elapsed+=3;
+        if(textEl) textEl.textContent='Running '+window.label+'… '+elapsed+'s';
+        const pr=await fetch(`${API_BASE}/claude/result/${job_id}`,{headers:{'x-api-key':API_KEY}});
+        if(!pr.ok) throw new Error('Poll '+pr.status);
+        const job=await pr.json();
+        if(job.status==='done'){
+          if(spinner) spinner.style.display='none';
+          showFeedResult(window, job.text||'No response.');
+          await saveScanResult(window.type, job.text||'');
+          attempt=99; break; // success — exit retry loop
+        } else if(job.status==='error'){
+          throw new Error(job.text||'Scan failed');
+        }
+      }
+      break;
+    } catch(e){
+      if(attempt>=3){
+        if(spinner) spinner.style.display='none';
+        if(content) content.innerHTML='<div class="feed-empty">Scan error: '+e.message+'</div>';
+      }
+    }
+  }
+}
+
 function showFeedResult(window, text){
   const content=document.getElementById('feed-content');
   const labelEl=document.getElementById('feed-label');
@@ -751,21 +863,29 @@ function showFeedResult(window, text){
 }
 
 async function initHomeFeed(){
-  const window=getCurrentScanWindow();
-  if(!window) return;
+  const win=getCurrentScanWindow();
+  if(!win) return;
   const labelEl=document.getElementById('feed-label');
-  if(labelEl) labelEl.textContent=window.icon+' '+window.label;
+  if(labelEl) labelEl.textContent=win.icon+' '+win.label;
+
+  // Always check cache first — display if anything stored, fresh or not
   try{
     const r=await fetch(`${API_BASE}/scan-results`,{headers:{'x-api-key':API_KEY}});
     const data=await r.json();
-    const stored=(data.results||{})[window.type];
-    if(stored && isResultFresh(stored.saved_at, window)){
-      showFeedResult(window, stored.content||'');
+    const results=data.results||{};
+
+    // Show the most relevant cached result (current window first, then any)
+    const stored=results[win.type];
+    if(stored && stored.content){
+      showFeedResult(win, stored.content, stored.saved_at);
       return;
     }
-  } catch(e){ console.log('Feed cache check error:',e.message); }
-  // No fresh result — run the scan
-  runHomeAutoScan(window);
+    // No result for current window — show run button
+    showRunButton(win);
+  } catch(e){
+    console.log('Feed cache check error:',e.message);
+    showRunButton(win);
+  }
 }
 
 async function loadScanFeed(){ await initHomeFeed(); }
