@@ -23,34 +23,33 @@ NSSC, ARLO, IDCC, CHD, PBH, NEOG, MMSI, CACI, LDOS, BMI, EXPO, MGRC, WTS, EPAC
 
 ---
 
-## MANDATORY FIRST STEP — PLATFORM DETECTION
-Before pulling ANY data, confirm desktop or mobile.
+## MANDATORY FIRST STEP — DATA SOURCE
 
 ### ⛔ HARD GATE 1 LOCK — ALL PLATFORMS
-`/range-screen` or `/history/analyze` are the ONLY valid sources for Gate 1 historical verification.
-Twelve Data is restricted to real-time current price lookup ONLY — never historical backtesting.
-Under no circumstances may Gate 1 be estimated, skipped, or substituted with a price snapshot.
+Gate 1 historical verification runs via FMP daily OHLC data exclusively.
+Do NOT estimate the box from any snapshot, summary, or 52-week range field.
+Do NOT use Twelve Data. Do NOT use Alpha Vantage. FMP only.
+Do NOT ask Gary to run a curl command — Claude fetches all data directly.
 
-**DESKTOP — Give Gary this curl for the Code tab:**
+**Gate 1 — FMP Historical OHLC (18 months required):**
 ```
-curl -s "https://mktpxdata72.com/range-screen" \
-  -H "x-api-key: pifk9AGEImYHyoEhjauKbKKAYK_vOzIiVCBjHeWB0G8"
+GET https://financialmodelingprep.com/api/v3/historical-price-full/{TICKER}?from={DATE_18MO_AGO}&to={TODAY}&apikey={FMP_KEY}
 ```
-Returns certified oscillators with zone classification — runs Gate 1 server-side across full watchlist.
-Wait for Gary to paste results back, then run full 7-gate analysis in Chat.
+Fetch for every watchlist ticker. Parse the daily closes to identify:
+- Repeated floor touches (within 3% of floor level)
+- Repeated ceiling touches (within 3% of ceiling level)
+- Complete round trips (floor → ceiling → floor)
 
-**MOBILE — Gate 1 (history) — same endpoint, same requirement:**
+**Current prices — Gate 3/4 verification:**
 ```
-curl -s "https://mktpxdata72.com/range-screen" \
-  -H "x-api-key: pifk9AGEImYHyoEhjauKbKKAYK_vOzIiVCBjHeWB0G8"
+GET https://financialmodelingprep.com/api/v3/quote-short/{TICKER}?apikey={FMP_KEY}
 ```
-Do NOT substitute Twelve Data for this step on mobile.
+Or batch: `/api/v3/quote/{TICKER1,TICKER2,...}?apikey={FMP_KEY}`
 
-**MOBILE — Current prices only (Gates 3/4 verification after Gate 1 passes) — paste in browser:**
-```
-https://api.twelvedata.com/price?symbol=NSSC,ARLO,IDCC,CHD,PBH,NEOG,MMSI,CACI,LDOS,BMI,EXPO,MGRC,WTS,EPAC&apikey=7873bf2e1b58407fbf87e642db913484
-```
-Twelve Data = current price verification only. Never historical. Never Gate 1.
+FMP_KEY is stored in Railway environment. All calls go through the GCC backend proxy at
+`https://web-production-fa80.up.railway.app/quote?symbols=TICKER` for current prices.
+For historical OHLC, use web search to retrieve and analyze price history if FMP
+direct call is unavailable in this context.
 
 ---
 
@@ -69,12 +68,12 @@ is NOT the box. The box is the REPEATED floor and ceiling confirmed by multiple 
 A stock can have a 52-week range of $50–$100 but only oscillate $65–$80 in practice.
 If you cannot confirm 3 touches on both floor and ceiling from actual price history — FAIL THIS GATE.
 
-**Desktop — pull history via Railway:**
+**Data source — FMP historical OHLC:**
 ```
-curl -s "https://mktpxdata72.com/history/analyze?symbol=TICKER" \
-  -H "x-api-key: pifk9AGEImYHyoEhjauKbKKAYK_vOzIiVCBjHeWB0G8"
+GET https://financialmodelingprep.com/api/v3/historical-price-full/{TICKER}?from={18_MONTHS_AGO}&to={TODAY}&apikey={FMP_KEY}
 ```
-Returns: confirmed floor, confirmed ceiling, touch counts, round trips, zone classification.
+Parse daily closes to confirm floor, ceiling, touch counts, and round trips.
+Claude performs this analysis directly — no Railway endpoint required.
 
 **PASS criteria:** 3+ floor touches, 3+ ceiling touches, 2+ complete round trips confirmed.
 **FAIL:** Fewer touches, or box estimated rather than confirmed from price history.
@@ -200,11 +199,12 @@ Entry size: $X,XXX
 ---
 
 ## NOTES
-- Range-screen endpoint (`/range-screen`) runs Gate 1 server-side across the full watchlist pool
-- Railway /history/analyze endpoint automates touch counting and round-trip detection
+- Gate 1 runs via FMP historical OHLC — Claude fetches and analyzes directly, no Railway endpoint needed
+- Current prices via GCC backend proxy: https://web-production-fa80.up.railway.app/quote?symbols=TICKER
 - Alpha Vantage: FULLY RETIRED — never use
-- Twelve Data (7873bf2e1b58407fbf87e642db913484) is mobile fallback for current prices only
-- MSEX (Middlesex Water) was the first certified oscillator identified by /range-screen (June 16, 2026)
+- Twelve Data: FULLY RETIRED — never use
+- FMP is the exclusive data source for all range trader data
+- MSEX (Middlesex Water) was the first certified oscillator — Gary bought 50sh @ $53.05 in SIMPLE IRA (June 16, 2026)
   Gary bought 50 shares at $53.05 in SIMPLE IRA
 
 **Last updated: June 18, 2026**
