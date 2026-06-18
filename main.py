@@ -2412,6 +2412,292 @@ async def update_portfolio(request: Request):
     })
 
 
+# ── Macro Regime Check ───────────────────────────────────────────────────────
+# Fetches SPY and QQQ price vs 200-day SMA to determine market regime.
+# Used by Discovery and Range Trader to calibrate scan parameters.
+# GET /macro-regime → { "regime": "UPTREND"|"CORRECTION"|"BEAR", ... }
+
+@app.get("/macro-regime", dependencies=[Depends(verify_key)])
+async def macro_regime():
+    """
+    Returns current macro regime based on SPY and QQQ vs their 200-day SMAs.
+    UPTREND:    Both above 200 SMA → normal scan parameters
+    CORRECTION: One above, one below → tighten parameters, flag regime risk
+    BEAR:       Both below 200 SMA → maximum caution, range trades need 4+ touches
+    """
+    symbols = ["SPY", "QQQ"]
+    async with httpx.AsyncClient(timeout=10) as client:
+        results = await asyncio.gather(
+            *[fmp(client, "quote", {"symbol": s}) for s in symbols]
+        )
+
+    readings = []
+    for sym, r in zip(symbols, results):
+        q = first(r)
+        price    = float(q.get("price") or 0)
+        ma200    = float(q.get("priceAvg200") or 0)
+        ma50     = float(q.get("priceAvg50") or 0)
+        chg_pct  = float(q.get("changePercentage") or 0)
+        above_200 = price > ma200 if ma200 > 0 else None
+        pct_from_200 = round(((price - ma200) / ma200) * 100, 1) if ma200 > 0 else None
+        readings.append({
+            "symbol":        sym,
+            "price":         price,
+            "ma200":         round(ma200, 2),
+            "ma50":          round(ma50, 2),
+            "above_200":     above_200,
+            "pct_from_200":  pct_from_200,
+            "change_pct":    chg_pct,
+        })
+
+    both_above = all(r["above_200"] for r in readings if r["above_200"] is not None)
+    both_below = all(not r["above_200"] for r in readings if r["above_200"] is not None)
+
+    if both_above:
+        regime = "UPTREND"
+        scan_params = {
+            "discovery_confidence":     "NORMAL",
+            "range_min_touches":        3,
+            "range_min_weeks":          6,
+            "flag_regime_risk":         False,
+            "summary": "Market in healthy uptrend. Normal scan parameters apply."
+        }
+    elif both_below:
+        regime = "BEAR"
+        scan_params = {
+            "discovery_confidence":     "MAXIMUM_CAUTION",
+            "range_min_touches":        4,
+            "range_min_weeks":          8,
+            "flag_regime_risk":         True,
+            "summary": "Both SPY and QQQ below 200 SMA. Bear market conditions. "
+                       "Range trades require 4+ touches. Discovery names flagged as regime risk. "
+                       "Favor income/defensive names over speculative. Tier 1 Roth sizing reduced."
+        }
+    else:
+        regime = "CORRECTION"
+        scan_params = {
+            "discovery_confidence":     "CAUTIOUS",
+            "range_min_touches":        3,
+            "range_min_weeks":          7,
+            "flag_regime_risk":         True,
+            "summary": "Mixed signals — one index above 200 SMA, one below. "
+                       "Correction/transition phase. Flag all discovery names with regime risk. "
+                       "Range trades: prefer names above their own 200 SMA."
+        }
+
+    return no_cache({
+        "regime":      regime,
+        "timestamp":   datetime.utcnow().isoformat(),
+        "readings":    readings,
+        "scan_params": scan_params,
+    })
+
+
+# ── Stealth Catalyst Screen ───────────────────────────────────────────────────
+# Finds 8-K filings and insider buys where the price has NOT reacted yet.
+# This is the "Day 1 not Day 30" screen — before retail finds it.
+# Used by Discovery Engine 5.
+
+@app.get("/stealth-catalyst", dependencies=[Depends(verify_key)])
+async def stealth_catalyst(
+    days: int = Query(default=10),        # how far back to look for 8-Ks
+    max_price_reaction: float = Query(default=8.0),  # % move = already priced in
+    min_insider_usd: int = Query(default=25000),
+    _key=Depends(verify_key)
+):
+    """
+    Finds micro/small cap names where a catalyst fired recently but price has
+    not reacted yet. Combines 8-K filings + insider Form 4 buys + price check.
+
+    Returns names ranked by signal strength:
+    - TRIPLE SIGNAL: 8-K + insider buy + flat price = highest priority
+    - STEALTH CATALYST: 8-K + flat price (no insider buy yet)
+    - EARLY INSIDER: insider cluster buy + flat price (no 8-K yet)
+    """
+    from datetime import datetime as dt, timedelta
+    from_date = (dt.utcnow() - timedelta(days=days)).strftime("%Y-%m-%d")
+    to_date   = dt.utcnow().strftime("%Y-%m-%d")
+
+    async with httpx.AsyncClient(timeout=25) as client:
+        # Fetch recent 8-K filings for defense/aerospace/infrastructure SIC codes
+        # SIC codes: 3812 (defense electronics), 3761 (guided missiles),
+        #            3769 (space propulsion), 3489 (ordnance/accessories),
+        #            3812 (search/detection/navigation), 1731 (electrical work/infra)
+        eight_k_tasks = []
+        for sic in [3812, 3761, 3769, 3489]:
+            eight_k_tasks.append(
+                fmp(client, "8k-latest", {"limit": 20})
+            )
+        eight_k_results = await asyncio.gather(*eight_k_tasks, return_exceptions=True)
+
+        # Also fetch latest 8-Ks broadly
+        broad_8k = await fmp(client, "8k-latest", {"limit": 50})
+
+    # Collect unique symbols from 8-K filings
+    symbols_8k = set()
+    contract_keywords = [
+        "contract", "award", "purchase order", "agreement", "program",
+        "government", "department of defense", "dod", "nasa", "air force",
+        "navy", "army", "prime contract", "task order", "delivery order"
+    ]
+
+    filings = broad_8k if isinstance(broad_8k, list) else []
+    stealth_8k = []
+
+    for f in filings:
+        title = (f.get("title") or f.get("formType") or "").lower()
+        text  = (f.get("text") or f.get("description") or "").lower()
+        sym   = f.get("symbol") or ""
+        date  = str(f.get("fillingDate") or f.get("date") or "")[:10]
+
+        # Only look at contract-related 8-Ks
+        if not any(kw in title or kw in text for kw in contract_keywords):
+            continue
+        if not sym or not date:
+            continue
+        if date < from_date:
+            continue
+
+        symbols_8k.add(sym)
+        stealth_8k.append({
+            "symbol": sym,
+            "date":   date,
+            "title":  (f.get("title") or "")[:120],
+        })
+
+    if not symbols_8k:
+        return no_cache({
+            "timestamp":        dt.utcnow().isoformat(),
+            "stealth_signals":  [],
+            "note":             "No contract-related 8-Ks found in window",
+            "days_searched":    days,
+        })
+
+    # Check price reaction since filing for each symbol
+    async with httpx.AsyncClient(timeout=20) as client:
+        price_tasks  = [fmp(client, "stock-price-change", {"symbol": s}) for s in symbols_8k]
+        quote_tasks  = [fmp(client, "quote", {"symbol": s}) for s in symbols_8k]
+        insider_tasks = [fmp(client, "insider-trading", {"symbol": s, "limit": 20}) for s in symbols_8k]
+
+        price_results, quote_results, insider_results = await asyncio.gather(
+            asyncio.gather(*price_tasks, return_exceptions=True),
+            asyncio.gather(*quote_tasks, return_exceptions=True),
+            asyncio.gather(*insider_tasks, return_exceptions=True),
+        )
+
+    sym_list = list(symbols_8k)
+    signals = []
+
+    for i, sym in enumerate(sym_list):
+        # Price reaction
+        price_r  = first(price_results[i]) if not isinstance(price_results[i], Exception) else {}
+        quote_r  = first(quote_results[i]) if not isinstance(quote_results[i], Exception) else {}
+        insider_r = insider_results[i] if not isinstance(insider_results[i], Exception) else []
+
+        price_5d  = float(price_r.get("5D")  or price_r.get("5d")  or 0)
+        price_1d  = float(price_r.get("1D")  or price_r.get("1d")  or 0)
+        price     = float(quote_r.get("price") or 0)
+        mkt_cap   = float(quote_r.get("marketCap") or 0)
+        avg_vol   = float(quote_r.get("avgVolume") or 0)
+
+        # Skip if already ran or too big
+        if abs(price_5d) > max_price_reaction:
+            continue
+        if mkt_cap > 3_000_000_000:  # >$3B = too large
+            continue
+        if avg_vol < 50_000:          # illiquid
+            continue
+
+        # Check insider buys in window
+        insider_buys = []
+        if isinstance(insider_r, list):
+            for trade in insider_r:
+                ttype = (trade.get("transactionType") or "").upper()
+                if "PURCHASE" not in ttype and ttype != "P":
+                    continue
+                trade_date = str(trade.get("transactionDate") or "")[:10]
+                if trade_date < from_date:
+                    continue
+                shares = float(trade.get("securitiesTransacted") or 0)
+                tprice = float(trade.get("price") or 0)
+                value  = shares * tprice
+                if value < min_insider_usd:
+                    continue
+                insider_buys.append({
+                    "name":      trade.get("reportingName") or "Unknown",
+                    "date":      trade_date,
+                    "value_usd": round(value),
+                })
+
+        distinct_buyers = list({b["name"] for b in insider_buys})
+        total_insider   = sum(b["value_usd"] for b in insider_buys)
+
+        # Find matching 8-K for this symbol
+        matching_8k = [f for f in stealth_8k if f["symbol"] == sym]
+
+        # Determine signal type
+        has_8k     = len(matching_8k) > 0
+        has_insider = len(distinct_buyers) >= 1
+        is_cluster  = len(distinct_buyers) >= 3
+
+        if has_8k and is_cluster:
+            signal_type = "TRIPLE_SIGNAL"
+            priority    = 1
+        elif has_8k and has_insider:
+            signal_type = "STEALTH_CATALYST_WITH_INSIDER"
+            priority    = 2
+        elif has_8k:
+            signal_type = "STEALTH_CATALYST"
+            priority    = 3
+        elif is_cluster:
+            signal_type = "CLUSTER_INSIDER_BUY"
+            priority    = 4
+        elif has_insider:
+            signal_type = "EARLY_INSIDER_SIGNAL"
+            priority    = 5
+        else:
+            continue  # no meaningful signal
+
+        signals.append({
+            "symbol":           sym,
+            "signal_type":      signal_type,
+            "priority":         priority,
+            "price":            price,
+            "market_cap_M":     round(mkt_cap / 1e6, 1) if mkt_cap else None,
+            "price_5d_pct":     price_5d,
+            "price_1d_pct":     price_1d,
+            "has_8k":           has_8k,
+            "8k_filings":       matching_8k[:2],
+            "insider_buyers":   len(distinct_buyers),
+            "insider_total_usd": total_insider,
+            "insider_detail":   insider_buys[:5],
+            "avg_volume":       int(avg_vol),
+            "signal_label": (
+                "🔴 TRIPLE SIGNAL — 8-K + insider buy + flat price"      if signal_type == "TRIPLE_SIGNAL" else
+                "🟠 STEALTH CATALYST + INSIDER — 8-K filed, insider buying, price flat" if signal_type == "STEALTH_CATALYST_WITH_INSIDER" else
+                "🟡 STEALTH CATALYST — 8-K filed, price not reacted yet" if signal_type == "STEALTH_CATALYST" else
+                "🔵 CLUSTER INSIDER BUY — 3+ buyers, price flat"         if signal_type == "CLUSTER_INSIDER_BUY" else
+                "⚪ EARLY INSIDER SIGNAL — insider buying, price flat"
+            ),
+        })
+
+    # Sort by priority
+    signals.sort(key=lambda x: (x["priority"], -abs(x.get("market_cap_M") or 0)))
+
+    return no_cache({
+        "timestamp":       dt.utcnow().isoformat(),
+        "days_searched":   days,
+        "8ks_scanned":     len(stealth_8k),
+        "symbols_checked": len(sym_list),
+        "signals_found":   len(signals),
+        "stealth_signals": signals,
+        "methodology": {
+            "stealth_definition": f"Catalyst fired in last {days} days, price moved <{max_price_reaction}%",
+            "insider_threshold":  f"Open-market buys >${min_insider_usd:,} USD",
+            "triple_signal":      "8-K contract filing + insider buy + price <8% reaction",
+        }
+    })
+
 
 # ── Gary Command Center ───────────────────────────────────────────────────────
 from pathlib import Path
