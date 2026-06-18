@@ -1217,7 +1217,60 @@ function parseConvLevels(symbol,text){const gn=(pp)=>{for(const p of pp){const m
 function convAdd(){if(!lastConvTicker){showToast('Run conviction first','error');return;}const lv=parseConvLevels(lastConvTicker,lastConvText);prefillModal(lastConvTicker,'',lv.tier,lv.zoneLow,lv.zoneHigh,lv.stop,lv.target1);}
 
 let lastRangeTicker='',lastRangeText='';
-async function runRange(){const today=new Date().toLocaleDateString('en-US',{weekday:'long',year:'numeric',month:'long',day:'numeric'});await callClaude(RANGE_SYSTEM,`Run range trader scan for ${today}. Find stocks in confirmed ranges with 3+ touches. Volume on support touch is the hard gate. Note RSI but do not require an RSI turn. Apply all 7 gates. Surface only clean setups.`,document.getElementById('range-output'),document.getElementById('range-status'),document.getElementById('range-btn'),'Run Range Scan ↗');lastRangeText=document.getElementById('range-output').textContent;document.getElementById('range-add-row').classList.add('visible');}
+async function runRange(){
+  const btn=document.getElementById('range-btn');
+  const out=document.getElementById('range-output');
+  const status=document.getElementById('range-status');
+  btn.disabled=true; btn.textContent='Scanning...';
+  if(status) status.textContent='Fetching certified oscillators...';
+  out.innerHTML='<em>Running 7-gate range screen across candidate pool...</em>';
+  try {
+    const res=await fetch(`${API_BASE}/range-screen`,{headers:{'x-api-key':API_KEY}});
+    if(!res.ok) throw new Error(`HTTP ${res.status}`);
+    const d=await res.json();
+    const ts=new Date(d.timestamp+'Z').toLocaleTimeString('en-US',{hour:'2-digit',minute:'2-digit',timeZone:'America/New_York'});
+    let html=`<strong>RANGE TRADER SCAN — ${new Date().toLocaleDateString('en-US',{weekday:'long',year:'numeric',month:'long',day:'numeric'})} ${ts} ET</strong>
+`;
+    html+=`Candidates screened: ${d.candidates_run} | Certified: ${d.certified_count} | Wide box: ${d.wide_box_count}
+
+`;
+    if(d.certified && d.certified.length>0){
+      html+=`✅ CERTIFIED OSCILLATORS (Gate 1 Pass):
+${'─'.repeat(50)}
+`;
+      d.certified.forEach(s=>{
+        const zoneLabel={'TIER2_BUY':'🔴 TIER 2 BUY ZONE','TIER1_BUY':'🟡 TIER 1 BUY ZONE','NEAR_CEILING':'⚠️ NEAR CEILING','MID_RANGE':'⚪ MID RANGE'}[s.zone]||s.zone;
+        html+=`
+${s.symbol} — ${zoneLabel}
+`;
+        html+=`Floor: $${s.body_low} | Ceiling: $${s.body_high} | Width: ${s.body_width_pct}%
+`;
+        html+=`Current: $${s.current_price} | Tier2 buy under: $${s.tier2_buy_under} | Tier1 buy under: $${s.tier1_buy_under}
+`;
+        html+=`Touches: ${s.floor_touches} floor / ${s.ceiling_touches} ceiling | Round trips: ${s.round_trips}
+`;
+      });
+    } else {
+      html+=`No certified oscillators in buy zone today.
+`;
+    }
+    if(d.wide_box_flags && d.wide_box_flags.length>0){
+      html+=`
+⚠️ WIDE BOX (>40% — valid oscillators, oversized range):
+`;
+      d.wide_box_flags.forEach(s=>{html+=`  ${s.symbol} — $${s.body_low}–$${s.body_high} (${s.body_width_pct}%)
+`;});
+    }
+    out.textContent=html;
+    lastRangeText=html;
+    document.getElementById('range-add-row').classList.add('visible');
+  } catch(e){
+    out.textContent=`Range scan error: ${e.message}`;
+  } finally {
+    btn.disabled=false; btn.textContent='Run Range Scan ↗';
+    if(status) status.textContent='';
+  }
+}
 async function runRangeSingle(){const ticker=(document.getElementById('range-ticker').value||'').trim().toUpperCase();if(!ticker){showToast('Enter a ticker first','error');return;}lastRangeTicker=ticker;const pd=priceCache[ticker],pn=pd?` Current price: $${pd.price.toFixed(2)}.`:'',wl=watchlist.find(t=>t.symbol===ticker),zn=wl?.zoneLow?` Known zone: $${wl.zoneLow}–$${wl.zoneHigh}.`:'';await callClaude(RANGE_SYSTEM,`Score the range setup for ${ticker}.${pn}${zn} Is it in a confirmed range with 3+ touches? Check volume on support touch. Note RSI. Apply all 7 gates. Give entry, stop, target, R/R.`,document.getElementById('range-output'),document.getElementById('range-status'),document.getElementById('range-single-btn'),'Score Range ↗');lastRangeText=document.getElementById('range-output').textContent;document.getElementById('range-add-row').classList.add('visible');}
 function rangeAdd(){const ticker=lastRangeTicker||(document.getElementById('range-ticker').value||'').trim().toUpperCase();if(!ticker){showToast('No ticker','error');return;}const lv=parseConvLevels(ticker,lastRangeText);prefillModal(ticker,'',lv.tier,lv.zoneLow,lv.zoneHigh,lv.stop,lv.target1);}
 
