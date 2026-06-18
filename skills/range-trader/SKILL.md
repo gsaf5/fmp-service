@@ -26,30 +26,25 @@ NSSC, ARLO, IDCC, CHD, PBH, NEOG, MMSI, CACI, LDOS, BMI, EXPO, MGRC, WTS, EPAC
 ## MANDATORY FIRST STEP — DATA SOURCE
 
 ### ⛔ HARD GATE 1 LOCK — ALL PLATFORMS
-Gate 1 historical verification runs via FMP daily OHLC data exclusively.
+Gate 1 historical verification uses the FMP MCP tool — already connected to this account.
 Do NOT estimate the box from any snapshot, summary, or 52-week range field.
-Do NOT use Twelve Data for historical data or Gate 1. Do NOT use Alpha Vantage ever. FMP for all historical OHLC.
-Do NOT ask Gary to run a curl command — Claude fetches all data directly.
+Do NOT use Twelve Data for historical data or Gate 1. Do NOT use Alpha Vantage ever.
+Do NOT ask Gary to run a curl command. Do NOT try to hit Railway endpoints.
+Claude fetches all data directly using the FMP MCP tool.
 
-**Gate 1 — FMP Historical OHLC (18 months required):**
-```
-GET https://financialmodelingprep.com/api/v3/historical-price-full/{TICKER}?from={DATE_18MO_AGO}&to={TODAY}&apikey={FMP_KEY}
-```
-Fetch for every watchlist ticker. Parse the daily closes to identify:
+**Gate 1 — FMP Historical OHLC via FMP MCP tool:**
+Use the FMP MCP `chart` tool with symbol and 18-month date range.
+This tool is available in every Claude chat — no API key or Railway needed.
+
+Call: FMP chart tool → symbol={TICKER} → from 18 months ago to today
+Parse the daily closes to identify:
 - Repeated floor touches (within 3% of floor level)
-- Repeated ceiling touches (within 3% of ceiling level)
+- Repeated ceiling touches (within 3% of ceiling level)  
 - Complete round trips (floor → ceiling → floor)
 
-**Current prices — Gate 3/4 verification:**
-```
-GET https://financialmodelingprep.com/api/v3/quote-short/{TICKER}?apikey={FMP_KEY}
-```
-Or batch: `/api/v3/quote/{TICKER1,TICKER2,...}?apikey={FMP_KEY}`
-
-FMP_KEY is stored in Railway environment. All calls go through the GCC backend proxy at
-`https://web-production-fa80.up.railway.app/quote?symbols=TICKER` for current prices.
-For historical OHLC, use web search to retrieve and analyze price history if FMP
-direct call is unavailable in this context.
+**Current prices — Gate 3/4 verification via FMP MCP:**
+Use the FMP MCP `quote` tool → symbol={TICKER}
+Returns live price, volume, 52wk range. No Railway proxy needed.
 
 ---
 
@@ -68,12 +63,10 @@ is NOT the box. The box is the REPEATED floor and ceiling confirmed by multiple 
 A stock can have a 52-week range of $50–$100 but only oscillate $65–$80 in practice.
 If you cannot confirm 3 touches on both floor and ceiling from actual price history — FAIL THIS GATE.
 
-**Data source — FMP historical OHLC:**
-```
-GET https://financialmodelingprep.com/api/v3/historical-price-full/{TICKER}?from={18_MONTHS_AGO}&to={TODAY}&apikey={FMP_KEY}
-```
+**Data source — FMP MCP chart tool:**
+Call FMP MCP `chart` tool for each ticker with 18-month lookback.
 Parse daily closes to confirm floor, ceiling, touch counts, and round trips.
-Claude performs this analysis directly — no Railway endpoint required.
+Claude performs this analysis directly using the MCP tool — no Railway endpoint, no curl, no API key needed.
 
 **PASS criteria:** 3+ floor touches, 3+ ceiling touches, 2+ complete round trips confirmed.
 **FAIL:** Fewer touches, or box estimated rather than confirmed from price history.
@@ -199,8 +192,9 @@ Entry size: $X,XXX
 ---
 
 ## NOTES
-- Gate 1 runs via FMP historical OHLC — Claude fetches and analyzes directly, no Railway endpoint needed
-- Current prices via GCC backend proxy: https://web-production-fa80.up.railway.app/quote?symbols=TICKER
+- Gate 1 runs via FMP MCP chart tool — available in every Claude chat, no Railway endpoint needed
+- Current prices via FMP MCP quote tool — available in every Claude chat
+- GCC backend proxy (https://web-production-fa80.up.railway.app/quote?symbols=TICKER) is for the Command Center dashboard only
 - Alpha Vantage: FULLY RETIRED — never use
 - Twelve Data (7873bf2e1b58407fbf87e642db913484): still active — use for current price
   lookup on mobile as fallback only. Never for historical data or Gate 1.
