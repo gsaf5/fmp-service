@@ -26,26 +26,31 @@ NSSC, ARLO, IDCC, CHD, PBH, NEOG, MMSI, CACI, LDOS, BMI, EXPO, MGRC, WTS, EPAC
 ## MANDATORY FIRST STEP — PLATFORM DETECTION
 Before pulling ANY data, confirm desktop or mobile.
 
-**DESKTOP:** Give Gary this curl for the Code tab:
-```
-curl -s "https://mktpxdata72.com/quote?symbols=NSSC,ARLO,IDCC,CHD,PBH,NEOG,MMSI,CACI,LDOS,BMI,EXPO,MGRC,WTS,EPAC" \
-  -H "x-api-key: pifk9AGEImYHyoEhjauKbKKAYK_vOzIiVCBjHeWB0G8"
-```
-Wait for Gary to paste results back, then run full analysis in Chat.
+### ⛔ HARD GATE 1 LOCK — ALL PLATFORMS
+`/range-screen` or `/history/analyze` are the ONLY valid sources for Gate 1 historical verification.
+Twelve Data is restricted to real-time current price lookup ONLY — never historical backtesting.
+Under no circumstances may Gate 1 be estimated, skipped, or substituted with a price snapshot.
 
-**MOBILE:** Give Gary this URL to paste in browser (Twelve Data batch):
-```
-https://api.twelvedata.com/price?symbol=NSSC,ARLO,IDCC,CHD,PBH,NEOG,MMSI,CACI,LDOS,BMI,EXPO,MGRC,WTS,EPAC&apikey=7873bf2e1b58407fbf87e642db913484
-```
-
-For 18-month history on mobile: use Railway /range-screen endpoint which runs Gate 1 server-side.
-
-**RANGE SCREEN ENDPOINT (preferred on both platforms for Gate 1):**
+**DESKTOP — Give Gary this curl for the Code tab:**
 ```
 curl -s "https://mktpxdata72.com/range-screen" \
   -H "x-api-key: pifk9AGEImYHyoEhjauKbKKAYK_vOzIiVCBjHeWB0G8"
 ```
-Returns certified oscillators with zone classification — replaces manual Gate 1 analysis.
+Returns certified oscillators with zone classification — runs Gate 1 server-side across full watchlist.
+Wait for Gary to paste results back, then run full 7-gate analysis in Chat.
+
+**MOBILE — Gate 1 (history) — same endpoint, same requirement:**
+```
+curl -s "https://mktpxdata72.com/range-screen" \
+  -H "x-api-key: pifk9AGEImYHyoEhjauKbKKAYK_vOzIiVCBjHeWB0G8"
+```
+Do NOT substitute Twelve Data for this step on mobile.
+
+**MOBILE — Current prices only (Gates 3/4 verification after Gate 1 passes) — paste in browser:**
+```
+https://api.twelvedata.com/price?symbol=NSSC,ARLO,IDCC,CHD,PBH,NEOG,MMSI,CACI,LDOS,BMI,EXPO,MGRC,WTS,EPAC&apikey=7873bf2e1b58407fbf87e642db913484
+```
+Twelve Data = current price verification only. Never historical. Never Gate 1.
 
 ---
 
@@ -139,13 +144,13 @@ Never scale up a range trade mid-position. Enter at the floor, exit at the ceili
 
 ## HOLD PROTOCOL & TIME STOPS
 
-| Week | Action |
-|------|--------|
-| Entry | Buy at floor zone, Gate 3 confirmed |
-| Week 1–4 | Monitor — no action unless ceiling hit or stop triggered |
-| Week 5 | 🚩 STALE FLAG — reassess. Is price still in box? Is RSI still constructive? |
-| Week 6–7 | Continue only with active reason. Document why still holding. |
-| Week 8 | ⛔ HARD STOP — exit regardless of price. The trade thesis has failed. |
+| Week | Action | Cadence |
+|------|--------|---------|
+| Entry | Buy at floor zone, Gate 3 confirmed | One-time entry — no scaling |
+| Week 1–4 | Monitor — no action unless ceiling hit or stop triggered | Check 2x per week minimum |
+| Week 5 | 🚩 STALE FLAG — run 3 checks: (1) still in box? (2) RSI constructive? (3) earnings window closing? | Full reassessment required |
+| Week 6–7 | Continue ONLY with 1 documented active reason per week | Must articulate reason or exit |
+| Week 8 | ⛔ HARD STOP — exit regardless of price, no exceptions | 0 days remaining — exit completely |
 
 **Floor break stop:** Exit if price closes 5% below the confirmed floor. No averaging down.
 **Earnings stop:** Exit before the 21-day earnings window regardless of position status.
