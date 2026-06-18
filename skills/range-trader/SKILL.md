@@ -28,7 +28,7 @@ NSSC, ARLO, IDCC, CHD, PBH, NEOG, MMSI, CACI, LDOS, BMI, EXPO, MGRC, WTS, EPAC
 ### ⛔ HARD GATE 1 LOCK — ALL PLATFORMS
 Gate 1 historical verification runs via FMP daily OHLC data exclusively.
 Do NOT estimate the box from any snapshot, summary, or 52-week range field.
-Do NOT use Twelve Data. Do NOT use Alpha Vantage. FMP only.
+Do NOT use Twelve Data for historical data or Gate 1. Do NOT use Alpha Vantage ever. FMP for all historical OHLC.
 Do NOT ask Gary to run a curl command — Claude fetches all data directly.
 
 **Gate 1 — FMP Historical OHLC (18 months required):**
@@ -202,8 +202,10 @@ Entry size: $X,XXX
 - Gate 1 runs via FMP historical OHLC — Claude fetches and analyzes directly, no Railway endpoint needed
 - Current prices via GCC backend proxy: https://web-production-fa80.up.railway.app/quote?symbols=TICKER
 - Alpha Vantage: FULLY RETIRED — never use
-- Twelve Data: FULLY RETIRED — never use
-- FMP is the exclusive data source for all range trader data
+- Twelve Data (7873bf2e1b58407fbf87e642db913484): still active — use for current price
+  lookup on mobile as fallback only. Never for historical data or Gate 1.
+  URL: https://api.twelvedata.com/price?symbol=TICKER&apikey=7873bf2e1b58407fbf87e642db913484
+- FMP is the primary data source. Twelve Data is mobile current-price fallback only.
 - MSEX (Middlesex Water) was the first certified oscillator — Gary bought 50sh @ $53.05 in SIMPLE IRA (June 16, 2026)
   Gary bought 50 shares at $53.05 in SIMPLE IRA
 
