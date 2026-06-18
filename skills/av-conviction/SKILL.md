@@ -1,12 +1,12 @@
 ---
 name: av-conviction
 description: >
-  ALWAYS use this skill when the user wants a conviction score on a stock, says "run AV on X",
-  "score this ticker", "give me conviction on X", "what does AV say about X", "check Alpha Vantage",
-  or asks for a 1-10 rating on any individual stock. This skill fetches live data from Alpha Vantage
-  (RSI, fundamentals, EPS history) and returns a 1-10 conviction score with entry, stop, targets,
-  tier placement, and the single biggest risk. Never skip this skill and rely on memory for conviction
-  scoring — always fetch live AV data first.
+  ALWAYS use this skill when the user wants a conviction score on a stock, says "run conviction on X",
+  "score this ticker", "give me conviction on X", or asks for a 1-10 rating on any individual stock.
+  This skill fetches live data from FMP (RSI, fundamentals, EPS history, analyst targets, insider trades)
+  and returns a 1-10 conviction score with entry, stop, targets, tier placement, and the single biggest
+  risk. Never skip this skill and rely on memory for conviction scoring — always fetch live FMP data first.
+  Alpha Vantage is permanently retired. Never use it.
 ---
 
 ## ⚠️ LIVE PRICE GATE — MANDATORY
@@ -27,50 +27,64 @@ When Gary corrects a price: re-fetch immediately, correct all analysis, and trea
 
 Before ANY other tool call, before ANY web search, before reading ANY other data:
 
-**STEP 0: web_fetch → https://robinhood.com/us/en/stocks/TICKER**
+**STEP 0: Fetch live price via GCC Railway proxy:**
+`https://web-production-fa80.up.railway.app/quote?symbols=TICKER`
 
 This is Tool Call #1. Always. Not Tool Call #3. Not after the searches come back.
 Search snippets contain stale prices. Railway FMP service is live. Use it.
 
-If you have already run a search query before fetching the Railway service, you have already made the mistake. Stop. Fetch Railway now. Correct the price before proceeding.
+If you have already run a search query before fetching the Railway proxy, you have already made the mistake. Stop. Fetch Railway now. Correct the price before proceeding.
 
 **DO NOT TYPE A DOLLAR AMOUNT NEXT TO ANY TICKER UNTIL THIS FETCH IS COMPLETE.**
 
 ---
 
-# AV Conviction Skill
+# Conviction Skill
 
-Fetches live data and produces a 1–10 conviction score using the user's investment framework.
+Fetches live data from FMP and produces a 1–10 conviction score using Gary's investment framework.
+Alpha Vantage is permanently retired. Never use alphavantage.co for any data.
 
-**DATA SOURCES — run in parallel:**
-1. **Alpha Vantage** (primary for fundamentals and RSI)
-2. **FMP MCP** (primary for live price, analyst targets, insider trades — always faster and more current)
+**DATA SOURCE — FMP exclusively via GCC Railway proxy and FMP MCP:**
 
-## API Key (Alpha Vantage)
-`171JCI69FB5GFTCL`
+## Step 1 — Fetch all data from FMP
 
-## Step 1 — Fetch data from BOTH sources simultaneously
+**Live price (mandatory first fetch):**
+`https://web-production-fa80.up.railway.app/quote?symbols=TICKER`
+Returns: current price, change %, day range, 52wk range, volume, market cap.
 
-**From FMP MCP (pull first — faster):**
-- `FMP:quote` endpoint `quote` → current price, 52wk range, volume, market cap
-- `FMP:analyst` endpoint `analyst-estimates` → analyst price targets and consensus rating
-- `FMP:insiderTrades` endpoint `insider-trades` → filter for last 7 days, buys only
-- `FMP:calendar` endpoint `earnings-calendar` → next earnings date
+**RSI and momentum — FMP stock-price-change:**
+`https://financialmodelingprep.com/api/v3/stock-price-change/{TICKER}?apikey={FMP_KEY}`
+Returns: 1D, 5D, 1M, 3M, 6M, 1Y price change. Use to determine RSI direction context.
 
-**From Alpha Vantage via web_fetch (run in parallel):**
+**RSI (14-day) — FMP technical indicator:**
+`https://financialmodelingprep.com/api/v3/technical_indicator/daily/{TICKER}?period=14&type=rsi&apikey={FMP_KEY}`
+Returns: daily RSI values. Pull last 5 sessions to confirm direction.
 
-**Overview:**
-`https://www.alphavantage.co/query?function=OVERVIEW&symbol={TICKER}&apikey=171JCI69FB5GFTCL`
+**Fundamentals — FMP key metrics:**
+`https://financialmodelingprep.com/api/v3/key-metrics-ttm/{TICKER}?apikey={FMP_KEY}`
+Returns: P/E, forward P/E, PEG, revenue growth, market cap, FCF.
 
-**RSI (14-day daily):**
-`https://www.alphavantage.co/query?function=RSI&symbol={TICKER}&interval=daily&time_period=14&series_type=close&apikey=171JCI69FB5GFTCL`
+**Analyst targets and ratings:**
+`https://financialmodelingprep.com/api/v4/price-target-summary?symbol={TICKER}&apikey={FMP_KEY}`
+`https://financialmodelingprep.com/api/v3/grade/{TICKER}?limit=10&apikey={FMP_KEY}`
 
-**Earnings history:**
-`https://www.alphavantage.co/query?function=EARNINGS&symbol={TICKER}&apikey=171JCI69FB5GFTCL`
+**Earnings history (last 4 quarters):**
+`https://financialmodelingprep.com/api/v3/earnings-surprises/{TICKER}?apikey={FMP_KEY}`
+Returns: estimated vs actual EPS per quarter, beat/miss.
 
-**Volume history (web search — mandatory):**
+**Next earnings date:**
+`https://financialmodelingprep.com/api/v3/historical/earning_calendar/{TICKER}?apikey={FMP_KEY}`
+
+**Insider trades (last 7 days, buys only):**
+`https://financialmodelingprep.com/api/v4/insider-trading?symbol={TICKER}&limit=20&apikey={FMP_KEY}`
+Filter for transactionType = "P-Purchase" within last 7 days.
+
+**Volume history — web search (mandatory):**
 Web search: `[TICKER] volume history average volume recent sessions [current month] [year]`
 Pull last 10 sessions of volume vs average. Note direction — rising or falling.
+
+**Note:** FMP_KEY is stored in Railway environment. If direct FMP calls are unavailable
+in this context, use web search to source fundamentals, RSI direction, and earnings data.
 
 ## Step 2 — Pre-Score Pressure Test (MANDATORY — run before scoring)
 
@@ -295,17 +309,17 @@ wait, or skip and why. If any gates flagged, explain how they affected the score
 ---
 
 ## Rules
-- Never skip the data fetch. Always pull live AV data before scoring.
+- Never skip the data fetch. Always pull live FMP data before scoring. Alpha Vantage is retired — never use it.
 - Never skip the Pre-Score Pressure Test. All 6 gates must be answered before scoring.
 - The bear case must be written before the bull case internally. Never start with the bull.
 - Be direct. No both-sides hedging. Give a clear verdict.
 - Score ceilings from flags are hard limits — do not override them with qualitative reasoning.
-- If AV returns a rate limit message or empty data, say so explicitly and tell the user to
-  try again in a few minutes (25 calls/day free tier limit).
 - Cross-reference the restricted-entities skill before scoring — if the ticker is restricted,
   flag it immediately and do not score.
 - If the ticker is also being evaluated for the taxable account, apply the Tier 2 Valuation
-  Gate from the investment-research skill using the PEG from AV data.
+  Gate from the investment-research skill using the PEG from FMP data.
 - Volume is mandatory data. A conviction score without volume history is incomplete.
 - The ZBIO rule: insider buying is a signal, not a thesis. Build the thesis on fundamentals,
   volume, and catalyst quality first. Layer insider buying on top as confirmation, not foundation.
+- Pre-profit or near-zero EPS names: use EV/Forward Revenue instead of PEG. PEG only applies
+  to profitable established companies.
