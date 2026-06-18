@@ -508,7 +508,12 @@
       <div class="ai-status" id="range-status"></div>
       <div class="ai-output empty" id="range-output">Run a scan or enter a ticker to score its range setup.</div>
       <div class="conv-add-row" id="range-add-row">
-        <button class="run-btn default" style="width:100%;font-size:14px" onclick="rangeAdd()">+ Add to Watchlist</button>
+        <div style="font-size:12px;color:var(--text3);margin-bottom:6px">Run conviction on certified oscillator:</div>
+        <div class="disc-chips" id="range-conv-chips"></div>
+        <div style="margin-top:10px;display:flex;gap:8px;">
+          <button class="run-btn default" style="flex:1;font-size:14px" onclick="rangeAdd()">+ Add to Watchlist</button>
+          <button class="run-btn default" style="flex:1;font-size:14px" onclick="copyRangeToClaude()">📋 Copy to Claude</button>
+        </div>
       </div>
     </div>
   </div>
@@ -1264,6 +1269,7 @@ ${s.symbol} — ${zoneLabel}
     out.textContent=html;
     lastRangeText=html;
     document.getElementById('range-add-row').classList.add('visible');
+    showRangeChips(d.certified);
   } catch(e){
     out.textContent=`Range scan error: ${e.message}`;
   } finally {
@@ -1271,6 +1277,36 @@ ${s.symbol} — ${zoneLabel}
     if(status) status.textContent='';
   }
 }
+function showRangeChips(certified){
+  const chips=document.getElementById('range-conv-chips');
+  if(!chips||!certified||!certified.length){return;}
+  chips.innerHTML=certified
+    .filter(s=>s.zone==='TIER2_BUY'||s.zone==='TIER1_BUY')
+    .map(s=>`<button class="disc-chip" onclick="runConvictionFromRange('${s.symbol}')">⚡ ${s.symbol} Conviction</button>`)
+    .join('');
+}
+
+function runConvictionFromRange(ticker){
+  document.getElementById('conv-ticker').value=ticker;
+  switchTab('conviction');
+  setTimeout(()=>runConviction(),200);
+}
+
+function copyRangeToClaude(){
+  const text=lastRangeText;
+  if(!text||text.includes('Run a scan')){showToast('Run a scan first','error');return;}
+  const prompt=`Here are my Range Trader scan results from the GCC:
+
+${text}
+
+Please review these certified oscillators, run the remaining gates (RSI, earnings date, volume health, binary events) on any names in buy zone, and give me a final verdict on which to enter.`;
+  navigator.clipboard.writeText(prompt).then(()=>{
+    showToast('Copied — paste into Claude.ai','success');
+  }).catch(()=>{
+    showToast('Copy failed — try again','error');
+  });
+}
+
 async function runRangeSingle(){const ticker=(document.getElementById('range-ticker').value||'').trim().toUpperCase();if(!ticker){showToast('Enter a ticker first','error');return;}lastRangeTicker=ticker;const pd=priceCache[ticker],pn=pd?` Current price: $${pd.price.toFixed(2)}.`:'',wl=watchlist.find(t=>t.symbol===ticker),zn=wl?.zoneLow?` Known zone: $${wl.zoneLow}–$${wl.zoneHigh}.`:'';await callClaude(RANGE_SYSTEM,`Score the range setup for ${ticker}.${pn}${zn} Is it in a confirmed range with 3+ touches? Check volume on support touch. Note RSI. Apply all 7 gates. Give entry, stop, target, R/R.`,document.getElementById('range-output'),document.getElementById('range-status'),document.getElementById('range-single-btn'),'Score Range ↗');lastRangeText=document.getElementById('range-output').textContent;document.getElementById('range-add-row').classList.add('visible');}
 function rangeAdd(){const ticker=lastRangeTicker||(document.getElementById('range-ticker').value||'').trim().toUpperCase();if(!ticker){showToast('No ticker','error');return;}const lv=parseConvLevels(ticker,lastRangeText);prefillModal(ticker,'',lv.tier,lv.zoneLow,lv.zoneHigh,lv.stop,lv.target1);}
 
