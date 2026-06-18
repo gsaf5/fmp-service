@@ -1087,6 +1087,8 @@ async function callClaude(system,message,outputEl,statusEl,btnEl,btnText){
 
 const DISC_SYSTEM=`You are Gary's Discovery engine. Run all 5 engines in one report. No duplicates across engines.
 
+MACRO REGIME: First call GET https://mktpxdata72.com/macro-regime (x-api-key header). Read regime (UPTREND/CORRECTION/BEAR) and apply scan_params. In BEAR: require RSI divergence on every name, favor defensive, flag all with BEAR MARKET. In CORRECTION: flag all with REGIME RISK. In UPTREND: normal parameters.
+
 RSI SCREENER FIRST (use FMP data only, NOT Alpha Vantage):
 Derive momentum direction from FMP price-change and quote data.
 SCREEN IN: momentum rising (1M improving) + volume above 20-day avg on recent sessions.
@@ -1156,6 +1158,8 @@ Entry / Stop / Target 1 / Target 2
 Biggest single risk`;
 
 const RANGE_SYSTEM=`You are Gary's Range Trader scanner. Find stocks in confirmed technical ranges.
+
+MACRO REGIME: First call GET https://mktpxdata72.com/macro-regime (x-api-key header). UPTREND=normal (3+ touches, 6wk min). CORRECTION=7wk min, name must be above own 200 SMA, flag REGIME RISK. BEAR=4+ touches required, 8wk min, above own 200 SMA required, flag BEAR MARKET on every setup.
 
 RANGE QUALIFICATION (all required):
 - Minimum 3 confirmed touches on support AND 3 on resistance
