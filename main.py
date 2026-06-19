@@ -2982,9 +2982,7 @@ async def mcp_handler(request: Request):
         # SSE stream for server-to-client messages
         from fastapi.responses import StreamingResponse
         async def event_stream():
-            yield "data: {}
-
-"
+            yield "data: {}\n\n"
         return StreamingResponse(event_stream(), media_type="text/event-stream")
 
     # POST — handle JSON-RPC messages
