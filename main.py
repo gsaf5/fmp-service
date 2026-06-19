@@ -2961,7 +2961,7 @@ mcp = FastMCP(
     instructions="Gary Command Center tools — range screen, quotes, macro regime, stealth catalyst, conviction lookup.",
 )
 
-@mcp.tool
+@mcp.tool()
 async def range_screen() -> dict:
     """
     Run the 7-gate range trader screen across the full candidate pool.
@@ -3020,7 +3020,7 @@ async def range_screen() -> dict:
 
     return {"certified": certified, "wide_box": wide_box, "candidates_run": len(RANGE_CANDIDATES), "certified_count": len(certified)}
 
-@mcp.tool
+@mcp.tool()
 async def get_quotes(symbols: str) -> dict:
     """
     Get live quotes for one or more tickers. Pass comma-separated symbols e.g. 'NVDA,AAPL,MSEX'.
@@ -3035,7 +3035,7 @@ async def get_quotes(symbols: str) -> dict:
         results[sym] = {"price": q.get("price"), "change_pct": q.get("changesPercentage"), "volume": q.get("volume"), "year_low": q.get("yearLow"), "year_high": q.get("yearHigh"), "market_cap": q.get("marketCap")}
     return results
 
-@mcp.tool
+@mcp.tool()
 async def macro_regime() -> dict:
     """
     Get current macro regime: UPTREND, CORRECTION, or BEAR.
@@ -3064,7 +3064,7 @@ async def macro_regime() -> dict:
 
     return {"regime": regime, "spy_vs_200sma": spy_pct, "qqq_vs_200sma": qqq_pct}
 
-@mcp.tool
+@mcp.tool()
 async def stealth_catalyst() -> dict:
     """
     Find stealth catalyst setups: 8-K contract filings where price hasn't moved yet.
