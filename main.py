@@ -3079,4 +3079,13 @@ async def stealth_catalyst() -> dict:
     return {"stealth_candidates": results}
 
 # Mount MCP at /mcp — Claude.ai connector URL: https://mktpxdata72.com/mcp
-app.mount("/mcp", mcp.http_app())
+# Mount MCP — try http_app() first, fall back to get_asgi_app() for older fastmcp versions
+try:
+    _mcp_app = mcp.http_app()
+except AttributeError:
+    try:
+        _mcp_app = mcp.get_asgi_app()
+    except AttributeError:
+        from mcp.server.fastmcp.server import create_app
+        _mcp_app = create_app(mcp)
+app.mount("/mcp", _mcp_app)
