@@ -2955,9 +2955,6 @@ async def stock_lookup(symbol: str = Query(...), x_api_key: str = Header(default
 # Auth: Bearer token = same API key as x-api-key header
 
 from mcp.server.fastmcp import FastMCP
-from mcp.server.auth.middleware.bearer_token import BearerAuthMiddleware
-
-GCC_API_KEY = os.environ.get("API_KEY", "")
 
 mcp = FastMCP(
     name="GCC Railway",
