@@ -3195,4 +3195,4 @@ async def macro_regime() -> dict:
     return {"regime": regime, "spy_vs_200sma": spy_pct, "qqq_vs_200sma": qqq_pct}
 
 # Mount MCP SSE at /mcp — Claude.ai connector URL: https://mktpxdata72.com/mcp/sse
-app.mount("/mcp", gcc_mcp.sse_app())
+app.mount("/mcp", gcc_mcp.sse_app(mount_path="/mcp"))
