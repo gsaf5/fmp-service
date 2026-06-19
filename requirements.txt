@@ -2,4 +2,5 @@ fastapi
 uvicorn[standard]
 httpx
 gunicorn
-# cache-bust v5.3
+fastmcp
+# cache-bust v5.4
