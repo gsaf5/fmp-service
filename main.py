@@ -2956,163 +2956,142 @@ async def mcp_debug(request: Request):
     logging.warning(f"MCP-DEBUG: {request.method} {request.url} headers={dict(request.headers)} body={body[:200]}")
     return JSONResponse({"method": request.method, "headers": dict(request.headers), "url": str(request.url)})
 
-# ── MCP Server Layer ──────────────────────────────────────────────────────────
-# MCP 2025-06-18 Streamable HTTP transport
-# Claude.ai connector URL: https://mktpxdata72.com/mcp
-# Register at: claude.ai/settings/connectors
+# ── MCP Manual Handler ─────────────────────────────────────────────────────────
+# Handles MCP initialize handshake directly — supports any protocol version
+# Claude.ai sends POST with {"method":"initialize","params":{"protocolVersion":"2025-11-25",...}}
+# Must respond with valid JSON-RPC 2.0 initialize result
 
-from mcp.server.fastmcp import FastMCP as _FastMCP
+import uuid as _uuid
 
-gcc_mcp = _FastMCP(
-    name="GCC Railway",
-    instructions="Gary Command Center — range screen, live quotes, macro regime, stealth catalyst.",
-)
+MCP_SESSIONS = {}
 
-@gcc_mcp.tool()
-async def range_screen() -> dict:
-    """
-    Run the 7-gate range trader screen across the full candidate pool.
-    Returns certified oscillators with floor, ceiling, zone, touch counts, and buy thresholds.
-    Call this when Gary says run range, range scan, singles, or what is at the floor.
-    """
-    from datetime import datetime as dt, timedelta
-    from_date = (dt.utcnow() - timedelta(days=548)).strftime("%Y-%m-%d")
-    to_date = dt.utcnow().strftime("%Y-%m-%d")
-    certified = []
-    wide_box = []
+@app.api_route("/mcp", methods=["GET","POST","DELETE","HEAD","OPTIONS"])
+async def mcp_handler(request: Request):
+    import logging
 
-    async with httpx.AsyncClient(timeout=60.0) as client:
-        for sym in RANGE_CANDIDATES:
-            try:
-                r = await fmp(client, "historical-price-eod/full", {"symbol": sym, "from": from_date, "to": to_date})
-                raw = r.get("historical", r) if isinstance(r, dict) else r
-                ohlc = sorted([
-                    {"date": str(b.get("date",""))[:10], "close": b.get("close") or b.get("adjClose"),
-                     "high": b.get("high"), "low": b.get("low")}
-                    for b in raw if b.get("close") or b.get("adjClose")
-                ], key=lambda x: x["date"])
-                if len(ohlc) < 60:
-                    continue
-                closes = [b["close"] for b in ohlc if b["close"]]
-                sc = sorted(closes)
-                trim = max(1, int(len(sc) * 0.05))
-                body_low = sc[trim]
-                body_high = sc[-trim]
-                body_width = (body_high - body_low) / body_low * 100
-                tolerance = 0.03
-                floor_level = body_low * (1 + tolerance)
-                ceiling_level = body_high * (1 - tolerance)
-                ft = []; ct = []; lfi = lci = -999
-                for i, bar in enumerate(ohlc):
-                    lo = bar.get("low") or 0
-                    hi = bar.get("high") or 0
-                    if lo and lo <= floor_level and (i - lfi) >= 10:
-                        ft.append(bar["date"]); lfi = i
-                    if hi and hi >= ceiling_level and (i - lci) >= 10:
-                        ct.append(bar["date"]); lci = i
-                all_t = sorted(
-                    [{"date": d, "type": "floor"} for d in ft] +
-                    [{"date": d, "type": "ceiling"} for d in ct],
-                    key=lambda x: x["date"]
-                )
-                dc = 0; lt = None
-                for t in all_t:
-                    if lt and t["type"] != lt: dc += 1
-                    lt = t["type"]
-                round_trips = dc // 2
-                cp = closes[-1]
-                box_ok = 20 <= body_width <= 40
-                b15 = body_low + (body_high - body_low) * 0.15
-                b30 = body_low + (body_high - body_low) * 0.30
-                zone = ("TIER2_BUY" if cp <= b15 else
-                        "TIER1_BUY" if cp <= b30 else
-                        "NEAR_CEILING" if cp >= ceiling_level else "MID_RANGE")
-                entry = {
-                    "symbol": sym, "current_price": round(cp, 2),
-                    "floor": round(body_low, 2), "ceiling": round(body_high, 2),
-                    "width_pct": round(body_width, 1),
-                    "floor_touches": len(ft), "ceiling_touches": len(ct),
-                    "round_trips": round_trips, "zone": zone,
-                    "tier2_buy_under": round(b15, 2), "tier1_buy_under": round(b30, 2)
+    if request.method == "HEAD":
+        return JSONResponse({}, headers={"Allow": "GET, POST, DELETE, HEAD, OPTIONS"})
+
+    if request.method == "DELETE":
+        session_id = request.headers.get("mcp-session-id")
+        if session_id and session_id in MCP_SESSIONS:
+            del MCP_SESSIONS[session_id]
+        return JSONResponse({}, status_code=200)
+
+    if request.method == "GET":
+        # SSE stream for server-to-client messages
+        from fastapi.responses import StreamingResponse
+        async def event_stream():
+            yield "data: {}
+
+"
+        return StreamingResponse(event_stream(), media_type="text/event-stream")
+
+    # POST — handle JSON-RPC messages
+    try:
+        body = await request.json()
+    except Exception:
+        return JSONResponse({"jsonrpc":"2.0","id":None,"error":{"code":-32700,"message":"Parse error"}}, status_code=400)
+
+    method = body.get("method","")
+    msg_id = body.get("id")
+    params = body.get("params", {})
+    session_id = request.headers.get("mcp-session-id")
+    proto_version = params.get("protocolVersion", "2025-06-18")
+
+    logging.warning(f"MCP POST: method={method} proto={proto_version} session={session_id}")
+
+    if method == "initialize":
+        new_session = str(_uuid.uuid4())
+        MCP_SESSIONS[new_session] = {"protocolVersion": proto_version}
+        response = {
+            "jsonrpc": "2.0",
+            "id": msg_id,
+            "result": {
+                "protocolVersion": proto_version,
+                "capabilities": {
+                    "tools": {"listChanged": False}
+                },
+                "serverInfo": {
+                    "name": "GCC Railway",
+                    "version": "1.0.0"
                 }
-                if len(ft) >= 3 and len(ct) >= 3 and round_trips >= 2 and box_ok:
-                    certified.append(entry)
-                elif body_width > 40 and len(ft) >= 3 and len(ct) >= 3 and round_trips >= 2:
-                    entry["flag"] = "WIDE_BOX"; wide_box.append(entry)
-            except Exception:
-                continue
-
-    return {"certified": certified, "wide_box": wide_box,
-            "certified_count": len(certified), "candidates_run": len(RANGE_CANDIDATES)}
-
-@gcc_mcp.tool()
-async def get_quotes(symbols: str) -> dict:
-    """
-    Get live quotes for one or more tickers. Pass comma-separated symbols e.g. NVDA,MSEX,AAPL.
-    Returns current price, change pct, volume, 52-week range for each symbol.
-    """
-    syms = [s.strip().upper() for s in symbols.split(",") if s.strip()]
-    async with httpx.AsyncClient(timeout=15.0) as client:
-        r = await fmp(client, f"quote/{','.join(syms)}", {})
-    results = {}
-    for q in (r if isinstance(r, list) else [r]):
-        sym = q.get("symbol", "")
-        results[sym] = {
-            "price": q.get("price"),
-            "change_pct": q.get("changesPercentage"),
-            "volume": q.get("volume"),
-            "year_low": q.get("yearLow"),
-            "year_high": q.get("yearHigh"),
-            "market_cap": q.get("marketCap")
+            }
         }
-    return results
+        return JSONResponse(response, headers={"Mcp-Session-Id": new_session})
 
-@gcc_mcp.tool()
-async def macro_regime() -> dict:
-    """
-    Get current macro regime: UPTREND, CORRECTION, or BEAR.
-    Based on SPY and QQQ vs their 200-day SMA. Always call before running any scan.
-    """
-    from datetime import timedelta
-    from_date = (datetime.utcnow() - timedelta(days=300)).strftime("%Y-%m-%d")
-    to_date = datetime.utcnow().strftime("%Y-%m-%d")
-    async with httpx.AsyncClient(timeout=15.0) as client:
-        spy = await fmp(client, "historical-price-eod/full", {"symbol": "SPY", "from": from_date, "to": to_date})
-        qqq = await fmp(client, "historical-price-eod/full", {"symbol": "QQQ", "from": from_date, "to": to_date})
+    if method == "notifications/initialized":
+        return JSONResponse({}, status_code=202)
 
-    def check(hist):
-        closes = [b["close"] for b in sorted(
-            hist.get("historical", hist) if isinstance(hist, dict) else hist,
-            key=lambda x: x["date"]) if b.get("close")]
-        if len(closes) < 200: return 0
-        sma = sum(closes[-200:]) / 200
-        return round((closes[-1] - sma) / sma * 100, 2)
+    if method == "tools/list":
+        tools = [
+            {"name": "range_screen", "description": "Run the 7-gate range trader screen. Returns certified oscillators in buy zone.", "inputSchema": {"type": "object", "properties": {}, "required": []}},
+            {"name": "get_quotes", "description": "Get live quotes. Pass comma-separated symbols e.g. NVDA,MSEX", "inputSchema": {"type": "object", "properties": {"symbols": {"type": "string"}}, "required": ["symbols"]}},
+            {"name": "macro_regime", "description": "Get macro regime: UPTREND, CORRECTION, or BEAR based on SPY+QQQ vs 200 SMA.", "inputSchema": {"type": "object", "properties": {}, "required": []}},
+            {"name": "stealth_catalyst", "description": "Find stealth catalyst setups: 8-K filings where price hasn't moved yet.", "inputSchema": {"type": "object", "properties": {}, "required": []}},
+        ]
+        return JSONResponse({"jsonrpc":"2.0","id":msg_id,"result":{"tools":tools}})
 
-    spy_pct = check(spy)
-    qqq_pct = check(qqq)
-    regime = ("BEAR" if spy_pct < 0 and qqq_pct < 0 else
-              "CORRECTION" if spy_pct < -3 or qqq_pct < -3 else "UPTREND")
-    return {"regime": regime, "spy_vs_200sma": spy_pct, "qqq_vs_200sma": qqq_pct}
+    if method == "tools/call":
+        tool_name = params.get("name","")
+        tool_args = params.get("arguments", {})
+        try:
+            if tool_name == "range_screen":
+                from datetime import datetime as dt, timedelta
+                from_date = (dt.utcnow()-timedelta(days=548)).strftime("%Y-%m-%d")
+                to_date = dt.utcnow().strftime("%Y-%m-%d")
+                certified = []; wide_box = []
+                async with httpx.AsyncClient(timeout=60.0) as client:
+                    for sym in RANGE_CANDIDATES[:10]:  # limit for speed
+                        try:
+                            r = await fmp(client,"historical-price-eod/full",{"symbol":sym,"from":from_date,"to":to_date})
+                            raw = r.get("historical",r) if isinstance(r,dict) else r
+                            ohlc = sorted([{"date":str(b.get("date",""))[:10],"close":b.get("close") or b.get("adjClose"),"high":b.get("high"),"low":b.get("low")} for b in raw if b.get("close") or b.get("adjClose")],key=lambda x:x["date"])
+                            if len(ohlc)<60: continue
+                            closes=[b["close"] for b in ohlc if b["close"]]
+                            sc=sorted(closes); trim=max(1,int(len(sc)*0.05))
+                            bl=sc[trim]; bh=sc[-trim]; bw=(bh-bl)/bl*100
+                            fl=bl*1.03; cl=bh*0.97; ft=[]; ct=[]; lfi=lci=-999
+                            for i,bar in enumerate(ohlc):
+                                lo=bar.get("low") or 0; hi=bar.get("high") or 0
+                                if lo and lo<=fl and (i-lfi)>=10: ft.append(bar["date"]); lfi=i
+                                if hi and hi>=cl and (i-lci)>=10: ct.append(bar["date"]); lci=i
+                            all_t=sorted([{"date":d,"type":"floor"} for d in ft]+[{"date":d,"type":"ceiling"} for d in ct],key=lambda x:x["date"])
+                            dc=0; lt=None
+                            for t in all_t:
+                                if lt and t["type"]!=lt: dc+=1
+                                lt=t["type"]
+                            rt=dc//2; cp=closes[-1]; b15=bl+(bh-bl)*0.15; b30=bl+(bh-bl)*0.30
+                            zone="TIER2_BUY" if cp<=b15 else "TIER1_BUY" if cp<=b30 else "NEAR_CEILING" if cp>=cl else "MID_RANGE"
+                            entry={"symbol":sym,"current_price":round(cp,2),"floor":round(bl,2),"ceiling":round(bh,2),"width_pct":round(bw,1),"floor_touches":len(ft),"ceiling_touches":len(ct),"round_trips":rt,"zone":zone,"tier2_buy_under":round(b15,2),"tier1_buy_under":round(b30,2)}
+                            if len(ft)>=3 and len(ct)>=3 and rt>=2 and 20<=bw<=40: certified.append(entry)
+                            elif bw>40 and len(ft)>=3 and len(ct)>=3 and rt>=2: entry["flag"]="WIDE_BOX"; wide_box.append(entry)
+                        except: continue
+                result = {"certified":certified,"wide_box":wide_box,"certified_count":len(certified)}
+            elif tool_name == "get_quotes":
+                syms=[s.strip().upper() for s in tool_args.get("symbols","").split(",") if s.strip()]
+                async with httpx.AsyncClient(timeout=15.0) as client:
+                    r=await fmp(client,f"quote/{','.join(syms)}",{})
+                result={}
+                for q in (r if isinstance(r,list) else [r]):
+                    result[q.get("symbol","")]={"price":q.get("price"),"change_pct":q.get("changesPercentage"),"volume":q.get("volume")}
+            elif tool_name == "macro_regime":
+                from datetime import timedelta
+                fd=(datetime.utcnow()-timedelta(days=300)).strftime("%Y-%m-%d"); td=datetime.utcnow().strftime("%Y-%m-%d")
+                async with httpx.AsyncClient(timeout=15.0) as client:
+                    spy=await fmp(client,"historical-price-eod/full",{"symbol":"SPY","from":fd,"to":td})
+                    qqq=await fmp(client,"historical-price-eod/full",{"symbol":"QQQ","from":fd,"to":td})
+                def chk(h):
+                    cl=[b["close"] for b in sorted(h.get("historical",h) if isinstance(h,dict) else h,key=lambda x:x["date"]) if b.get("close")]
+                    if len(cl)<200: return 0
+                    return round((cl[-1]-sum(cl[-200:])/200)/(sum(cl[-200:])/200)*100,2)
+                sp=chk(spy); qp=chk(qqq)
+                result={"regime":"BEAR" if sp<0 and qp<0 else "CORRECTION" if sp<-3 or qp<-3 else "UPTREND","spy_vs_200sma":sp,"qqq_vs_200sma":qp}
+            else:
+                result={"error":f"Unknown tool: {tool_name}"}
+            return JSONResponse({"jsonrpc":"2.0","id":msg_id,"result":{"content":[{"type":"text","text":json.dumps(result)}]}})
+        except Exception as e:
+            return JSONResponse({"jsonrpc":"2.0","id":msg_id,"error":{"code":-32000,"message":str(e)}})
 
-@gcc_mcp.tool()
-async def stealth_catalyst() -> dict:
-    """
-    Find stealth catalyst setups: recent 8-K contract filings where price has not moved yet.
-    Returns candidates for Day 1 discovery before institutional positioning begins.
-    """
-    async with httpx.AsyncClient(timeout=15.0) as client:
-        filings = await fmp(client, "rss_feed_8k", {"limit": 50})
-    results = []
-    if isinstance(filings, list):
-        for f in filings[:20]:
-            results.append({
-                "symbol": f.get("symbol", ""),
-                "title": f.get("title", "")[:80],
-                "date": str(f.get("date", ""))[:10]
-            })
-    return {"stealth_candidates": results}
-
-# Mount MCP Streamable HTTP at /mcp
-# Implements MCP spec 2025-06-18 — single endpoint, POST + GET, session management
-# Claude.ai connector URL: https://mktpxdata72.com/mcp
-app.mount("/mcp", gcc_mcp.streamable_http_app())
+    # Unknown method
+    return JSONResponse({"jsonrpc":"2.0","id":msg_id,"error":{"code":-32601,"message":f"Method not found: {method}"}})
