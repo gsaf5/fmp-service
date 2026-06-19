@@ -2949,6 +2949,14 @@ async def stock_lookup(symbol: str = Query(...), x_api_key: str = Header(default
         "recentGrades":  recent,
     })
 
+# ── MCP Debug Endpoint ────────────────────────────────────────────────────────
+@app.api_route("/mcp-debug", methods=["GET","POST","DELETE","HEAD","OPTIONS"])
+async def mcp_debug(request: Request):
+    body = await request.body()
+    import logging
+    logging.warning(f"MCP-DEBUG: {request.method} {request.url} headers={dict(request.headers)} body={body[:200]}")
+    return JSONResponse({"method": request.method, "headers": dict(request.headers), "url": str(request.url)})
+
 # ── MCP Server Layer ──────────────────────────────────────────────────────────
 # MCP 2025-06-18 Streamable HTTP transport
 # Claude.ai connector URL: https://mktpxdata72.com/mcp
