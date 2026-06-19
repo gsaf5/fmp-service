@@ -14,8 +14,7 @@ app.add_middleware(
     allow_origins=["*"],
     allow_methods=["GET", "POST", "OPTIONS", "DELETE", "HEAD"],
     allow_headers=["*"],
-    expose_headers=["Mcp-Session-Id", "MCP-Protocol-Version"],
-    expose_headers=["*"],
+    expose_headers=["Mcp-Session-Id", "MCP-Protocol-Version", "*"],
 )
 
 API_SECRET = os.environ.get("API_SECRET", "")
