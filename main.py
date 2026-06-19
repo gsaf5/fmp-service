@@ -3079,13 +3079,9 @@ async def stealth_catalyst() -> dict:
     return {"stealth_candidates": results}
 
 # Mount MCP at /mcp — Claude.ai connector URL: https://mktpxdata72.com/mcp
-# Mount MCP — try http_app() first, fall back to get_asgi_app() for older fastmcp versions
+# Mount MCP — streamable_http_app is the correct method for mcp>=1.0
 try:
-    _mcp_app = mcp.http_app()
+    _mcp_app = mcp.streamable_http_app()
 except AttributeError:
-    try:
-        _mcp_app = mcp.get_asgi_app()
-    except AttributeError:
-        from mcp.server.fastmcp.server import create_app
-        _mcp_app = create_app(mcp)
+    _mcp_app = mcp.sse_app()
 app.mount("/mcp", _mcp_app)
