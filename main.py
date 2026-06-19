@@ -12,8 +12,9 @@ app = FastAPI(title="Claude Market API", version="5.0")
 app.add_middleware(
     CORSMiddleware,
     allow_origins=["*"],
-    allow_methods=["GET", "POST", "OPTIONS"],
+    allow_methods=["GET", "POST", "OPTIONS", "DELETE", "HEAD"],
     allow_headers=["*"],
+    expose_headers=["Mcp-Session-Id", "MCP-Protocol-Version"],
     expose_headers=["*"],
 )
 
