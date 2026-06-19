@@ -3079,4 +3079,4 @@ async def stealth_catalyst() -> dict:
     return {"stealth_candidates": results}
 
 # Mount MCP at /mcp — Claude.ai connector URL: https://mktpxdata72.com/mcp
-app.mount("/mcp", mcp.streamable_http_app())
+app.mount("/mcp", mcp.http_app())
