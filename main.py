@@ -2947,3 +2947,164 @@ async def stock_lookup(symbol: str = Query(...), x_api_key: str = Header(default
         "analystTarget": apt,
         "recentGrades":  recent,
     })
+
+# ── MCP Server Layer ──────────────────────────────────────────────────────────
+# MCP 2025-06-18 Streamable HTTP transport
+# Claude.ai connector URL: https://mktpxdata72.com/mcp
+# Register at: claude.ai/settings/connectors
+
+from mcp.server.fastmcp import FastMCP as _FastMCP
+
+gcc_mcp = _FastMCP(
+    name="GCC Railway",
+    instructions="Gary Command Center — range screen, live quotes, macro regime, stealth catalyst.",
+)
+
+@gcc_mcp.tool()
+async def range_screen() -> dict:
+    """
+    Run the 7-gate range trader screen across the full candidate pool.
+    Returns certified oscillators with floor, ceiling, zone, touch counts, and buy thresholds.
+    Call this when Gary says run range, range scan, singles, or what is at the floor.
+    """
+    from datetime import datetime as dt, timedelta
+    from_date = (dt.utcnow() - timedelta(days=548)).strftime("%Y-%m-%d")
+    to_date = dt.utcnow().strftime("%Y-%m-%d")
+    certified = []
+    wide_box = []
+
+    async with httpx.AsyncClient(timeout=60.0) as client:
+        for sym in RANGE_CANDIDATES:
+            try:
+                r = await fmp(client, "historical-price-eod/full", {"symbol": sym, "from": from_date, "to": to_date})
+                raw = r.get("historical", r) if isinstance(r, dict) else r
+                ohlc = sorted([
+                    {"date": str(b.get("date",""))[:10], "close": b.get("close") or b.get("adjClose"),
+                     "high": b.get("high"), "low": b.get("low")}
+                    for b in raw if b.get("close") or b.get("adjClose")
+                ], key=lambda x: x["date"])
+                if len(ohlc) < 60:
+                    continue
+                closes = [b["close"] for b in ohlc if b["close"]]
+                sc = sorted(closes)
+                trim = max(1, int(len(sc) * 0.05))
+                body_low = sc[trim]
+                body_high = sc[-trim]
+                body_width = (body_high - body_low) / body_low * 100
+                tolerance = 0.03
+                floor_level = body_low * (1 + tolerance)
+                ceiling_level = body_high * (1 - tolerance)
+                ft = []; ct = []; lfi = lci = -999
+                for i, bar in enumerate(ohlc):
+                    lo = bar.get("low") or 0
+                    hi = bar.get("high") or 0
+                    if lo and lo <= floor_level and (i - lfi) >= 10:
+                        ft.append(bar["date"]); lfi = i
+                    if hi and hi >= ceiling_level and (i - lci) >= 10:
+                        ct.append(bar["date"]); lci = i
+                all_t = sorted(
+                    [{"date": d, "type": "floor"} for d in ft] +
+                    [{"date": d, "type": "ceiling"} for d in ct],
+                    key=lambda x: x["date"]
+                )
+                dc = 0; lt = None
+                for t in all_t:
+                    if lt and t["type"] != lt: dc += 1
+                    lt = t["type"]
+                round_trips = dc // 2
+                cp = closes[-1]
+                box_ok = 20 <= body_width <= 40
+                b15 = body_low + (body_high - body_low) * 0.15
+                b30 = body_low + (body_high - body_low) * 0.30
+                zone = ("TIER2_BUY" if cp <= b15 else
+                        "TIER1_BUY" if cp <= b30 else
+                        "NEAR_CEILING" if cp >= ceiling_level else "MID_RANGE")
+                entry = {
+                    "symbol": sym, "current_price": round(cp, 2),
+                    "floor": round(body_low, 2), "ceiling": round(body_high, 2),
+                    "width_pct": round(body_width, 1),
+                    "floor_touches": len(ft), "ceiling_touches": len(ct),
+                    "round_trips": round_trips, "zone": zone,
+                    "tier2_buy_under": round(b15, 2), "tier1_buy_under": round(b30, 2)
+                }
+                if len(ft) >= 3 and len(ct) >= 3 and round_trips >= 2 and box_ok:
+                    certified.append(entry)
+                elif body_width > 40 and len(ft) >= 3 and len(ct) >= 3 and round_trips >= 2:
+                    entry["flag"] = "WIDE_BOX"; wide_box.append(entry)
+            except Exception:
+                continue
+
+    return {"certified": certified, "wide_box": wide_box,
+            "certified_count": len(certified), "candidates_run": len(RANGE_CANDIDATES)}
+
+@gcc_mcp.tool()
+async def get_quotes(symbols: str) -> dict:
+    """
+    Get live quotes for one or more tickers. Pass comma-separated symbols e.g. NVDA,MSEX,AAPL.
+    Returns current price, change pct, volume, 52-week range for each symbol.
+    """
+    syms = [s.strip().upper() for s in symbols.split(",") if s.strip()]
+    async with httpx.AsyncClient(timeout=15.0) as client:
+        r = await fmp(client, f"quote/{','.join(syms)}", {})
+    results = {}
+    for q in (r if isinstance(r, list) else [r]):
+        sym = q.get("symbol", "")
+        results[sym] = {
+            "price": q.get("price"),
+            "change_pct": q.get("changesPercentage"),
+            "volume": q.get("volume"),
+            "year_low": q.get("yearLow"),
+            "year_high": q.get("yearHigh"),
+            "market_cap": q.get("marketCap")
+        }
+    return results
+
+@gcc_mcp.tool()
+async def macro_regime() -> dict:
+    """
+    Get current macro regime: UPTREND, CORRECTION, or BEAR.
+    Based on SPY and QQQ vs their 200-day SMA. Always call before running any scan.
+    """
+    from datetime import timedelta
+    from_date = (datetime.utcnow() - timedelta(days=300)).strftime("%Y-%m-%d")
+    to_date = datetime.utcnow().strftime("%Y-%m-%d")
+    async with httpx.AsyncClient(timeout=15.0) as client:
+        spy = await fmp(client, "historical-price-eod/full", {"symbol": "SPY", "from": from_date, "to": to_date})
+        qqq = await fmp(client, "historical-price-eod/full", {"symbol": "QQQ", "from": from_date, "to": to_date})
+
+    def check(hist):
+        closes = [b["close"] for b in sorted(
+            hist.get("historical", hist) if isinstance(hist, dict) else hist,
+            key=lambda x: x["date"]) if b.get("close")]
+        if len(closes) < 200: return 0
+        sma = sum(closes[-200:]) / 200
+        return round((closes[-1] - sma) / sma * 100, 2)
+
+    spy_pct = check(spy)
+    qqq_pct = check(qqq)
+    regime = ("BEAR" if spy_pct < 0 and qqq_pct < 0 else
+              "CORRECTION" if spy_pct < -3 or qqq_pct < -3 else "UPTREND")
+    return {"regime": regime, "spy_vs_200sma": spy_pct, "qqq_vs_200sma": qqq_pct}
+
+@gcc_mcp.tool()
+async def stealth_catalyst() -> dict:
+    """
+    Find stealth catalyst setups: recent 8-K contract filings where price has not moved yet.
+    Returns candidates for Day 1 discovery before institutional positioning begins.
+    """
+    async with httpx.AsyncClient(timeout=15.0) as client:
+        filings = await fmp(client, "rss_feed_8k", {"limit": 50})
+    results = []
+    if isinstance(filings, list):
+        for f in filings[:20]:
+            results.append({
+                "symbol": f.get("symbol", ""),
+                "title": f.get("title", "")[:80],
+                "date": str(f.get("date", ""))[:10]
+            })
+    return {"stealth_candidates": results}
+
+# Mount MCP Streamable HTTP at /mcp
+# Implements MCP spec 2025-06-18 — single endpoint, POST + GET, session management
+# Claude.ai connector URL: https://mktpxdata72.com/mcp
+app.mount("/mcp", gcc_mcp.streamable_http_app())
