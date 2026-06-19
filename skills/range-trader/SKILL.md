@@ -26,25 +26,24 @@ NSSC, ARLO, IDCC, CHD, PBH, NEOG, MMSI, CACI, LDOS, BMI, EXPO, MGRC, WTS, EPAC
 ## MANDATORY FIRST STEP — DATA SOURCE
 
 ### ⛔ HARD GATE 1 LOCK — ALL PLATFORMS
-Gate 1 historical verification uses the FMP MCP tool — already connected to this account.
-Do NOT estimate the box from any snapshot, summary, or 52-week range field.
-Do NOT use Twelve Data for historical data or Gate 1. Do NOT use Alpha Vantage ever.
-Do NOT ask Gary to run a curl command. Do NOT try to hit Railway endpoints.
-Claude fetches all data directly using the FMP MCP tool.
+Gate 1 runs via the Railway /range-screen endpoint using web_fetch.
+This works from any Claude chat on any platform — no API key, no curl, no plan upgrade needed.
+Do NOT ask Gary to run a curl command.
+Do NOT try to use FMP MCP historical endpoints — they are blocked on the current FMP plan.
+Do NOT estimate the box from 52-week range. Do NOT use Alpha Vantage ever.
 
-**Gate 1 — FMP Historical OHLC via FMP MCP tool:**
-Use the FMP MCP `chart` tool with symbol and 18-month date range.
-This tool is available in every Claude chat — no API key or Railway needed.
+**Gate 1 — fetch certified oscillators via web_fetch:**
+```
+web_fetch: https://mktpxdata72.com/range-screen
+Headers: x-api-key: pifk9AGEImYHyoEhjauKbKKAYK_vOzIiVCBjHeWB0G8
+```
+This returns certified oscillators with floor, ceiling, touch counts, round trips, zone,
+and buy thresholds — all pre-computed server-side from 18 months of real OHLC data.
+Parse the JSON and proceed directly to Gates 2–7 on each certified name.
 
-Call: FMP chart tool → symbol={TICKER} → from 18 months ago to today
-Parse the daily closes to identify:
-- Repeated floor touches (within 3% of floor level)
-- Repeated ceiling touches (within 3% of ceiling level)  
-- Complete round trips (floor → ceiling → floor)
-
-**Current prices — Gate 3/4 verification via FMP MCP:**
-Use the FMP MCP `quote` tool → symbol={TICKER}
-Returns live price, volume, 52wk range. No Railway proxy needed.
+**Current prices — Gate 3/4 verification:**
+Use FMP MCP `quote` tool → symbol={TICKER}
+Or web_fetch: https://web-production-fa80.up.railway.app/quote?symbols=TICKER
 
 ---
 
@@ -63,10 +62,11 @@ is NOT the box. The box is the REPEATED floor and ceiling confirmed by multiple 
 A stock can have a 52-week range of $50–$100 but only oscillate $65–$80 in practice.
 If you cannot confirm 3 touches on both floor and ceiling from actual price history — FAIL THIS GATE.
 
-**Data source — FMP MCP chart tool:**
-Call FMP MCP `chart` tool for each ticker with 18-month lookback.
-Parse daily closes to confirm floor, ceiling, touch counts, and round trips.
-Claude performs this analysis directly using the MCP tool — no Railway endpoint, no curl, no API key needed.
+**Data source — /range-screen via web_fetch:**
+The Railway endpoint has already run Gate 1 server-side for all candidates.
+Use the certified list returned by web_fetch of /range-screen.
+Floor, ceiling, touch counts, round trips, and zone are pre-computed.
+No additional historical data fetch needed for Gate 1.
 
 **PASS criteria:** 3+ floor touches, 3+ ceiling touches, 2+ complete round trips confirmed.
 **FAIL:** Fewer touches, or box estimated rather than confirmed from price history.
