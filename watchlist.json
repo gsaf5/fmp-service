@@ -1,0 +1,203 @@
+{
+  "updated": "2026-06-19",
+  "tickers": {
+    "DVN": {
+      "z1": [
+        42,
+        45
+      ],
+      "z2": null,
+      "stop": 38,
+      "t1": 54,
+      "t2": 62,
+      "tier": "Tier2Taxable",
+      "notes": ""
+    },
+    "MU": {
+      "z1": [
+        850,
+        900
+      ],
+      "z2": null,
+      "stop": 780,
+      "t1": 1100,
+      "t2": 1300,
+      "tier": "Tier1Roth",
+      "notes": "raised\u2014ran to $1067"
+    },
+    "CVX": {
+      "z1": null,
+      "z2": null,
+      "stop": null,
+      "t1": null,
+      "t2": null,
+      "tier": "Tier2Taxable",
+      "notes": "TBD"
+    },
+    "XOM": {
+      "z1": null,
+      "z2": null,
+      "stop": null,
+      "t1": null,
+      "t2": null,
+      "tier": "Tier2Taxable",
+      "notes": "TBD"
+    },
+    "NOC": {
+      "z1": [
+        490,
+        510
+      ],
+      "z2": 560,
+      "stop": 455,
+      "t1": 620,
+      "t2": 700,
+      "tier": "Tier2Defense",
+      "notes": "Z2 stop $520"
+    },
+    "LMT": {
+      "z1": [
+        470,
+        490
+      ],
+      "z2": 560,
+      "stop": 435,
+      "t1": 580,
+      "t2": 650,
+      "tier": "Tier2Defense",
+      "notes": "Z2 stop $520"
+    },
+    "FLTCF": {
+      "z1": [
+        5.0,
+        5.5
+      ],
+      "z2": null,
+      "stop": 4.25,
+      "t1": 7.5,
+      "t2": 9.5,
+      "tier": "Taxable",
+      "notes": "currently $4.49 \u2014 below entry"
+    },
+    "CDRE": {
+      "z1": [
+        29,
+        32
+      ],
+      "z2": null,
+      "stop": 26,
+      "t1": 42,
+      "t2": 52,
+      "tier": "Tier2Taxable",
+      "notes": "shelf+CEO overhang"
+    },
+    "MPTI": {
+      "z1": [
+        72,
+        76
+      ],
+      "z2": 95,
+      "stop": 60,
+      "t1": 95,
+      "t2": 120,
+      "tier": "Tier2Taxable",
+      "notes": "ATH $91\u2014wait for new base; Z2 stop $82"
+    },
+    "VOYG": {
+      "z1": [
+        38,
+        42
+      ],
+      "z2": 55,
+      "stop": 32,
+      "t1": 58,
+      "t2": 75,
+      "tier": "Tier1Roth",
+      "notes": "Z2 stop $47"
+    },
+    "NOVT": {
+      "z1": [
+        115,
+        120
+      ],
+      "z2": 145,
+      "stop": 98,
+      "t1": 155,
+      "t2": 185,
+      "tier": "Tier2Taxable",
+      "notes": "Z2 stop $128"
+    },
+    "CVU": {
+      "z1": [
+        4.2,
+        4.6
+      ],
+      "z2": null,
+      "stop": 3.75,
+      "t1": 6.5,
+      "t2": 8.5,
+      "tier": "Tier2Taxable",
+      "notes": "defense aerostructures\u2014IN ZONE NOW"
+    },
+    "ROBO": {
+      "z1": [
+        75,
+        80
+      ],
+      "z2": 93,
+      "stop": 68,
+      "t1": 100,
+      "t2": 115,
+      "tier": "Tier2Taxable",
+      "notes": "automation ETF; Z2 stop $87"
+    },
+    "MRVI": {
+      "z1": [
+        4.0,
+        4.3
+      ],
+      "z2": null,
+      "stop": 3.6,
+      "t1": 6.5,
+      "t2": 8.0,
+      "tier": "Tier1Roth",
+      "notes": "watch Aug10 earnings"
+    },
+    "RBCAA": {
+      "z1": [
+        74,
+        78
+      ],
+      "z2": null,
+      "stop": 68,
+      "t1": 95,
+      "t2": 110,
+      "tier": "Tier2Taxable",
+      "notes": "quality compounder\u2014only 2 analysts; wait for pullback from $85"
+    },
+    "CDNS": {
+      "z1": [
+        340,
+        360
+      ],
+      "z2": null,
+      "stop": null,
+      "t1": null,
+      "t2": null,
+      "tier": "Tier2Taxable",
+      "notes": "Watch only \u2014 post-earnings compression; trigger July 27"
+    },
+    "MSCI": {
+      "z1": [
+        610,
+        625
+      ],
+      "z2": 635,
+      "stop": 570,
+      "t1": 700,
+      "t2": 740,
+      "tier": "Tier2Taxable",
+      "notes": "June 23 Korea catalyst; June 30 hard deadline; July 21 earnings; CEO 5x buyer sub-$575"
+    }
+  }
+}
