@@ -2956,6 +2956,27 @@ async def mcp_debug(request: Request):
     logging.warning(f"MCP-DEBUG: {request.method} {request.url} headers={dict(request.headers)} body={body[:200]}")
     return JSONResponse({"method": request.method, "headers": dict(request.headers), "url": str(request.url)})
 
+# ── Watchlist GitHub helpers ──────────────────────────────────────────────────
+GITHUB_TOKEN = os.environ.get("GITHUB_TOKEN", "")
+GITHUB_REPO  = "gsaf5/fmp-service"
+WATCHLIST_PATH = "watchlist.json"
+
+async def github_get_watchlist():
+    url = f"https://api.github.com/repos/{GITHUB_REPO}/contents/{WATCHLIST_PATH}"
+    async with httpx.AsyncClient(timeout=10.0) as client:
+        r = await client.get(url, headers={"Authorization": f"token {GITHUB_TOKEN}", "Accept": "application/vnd.github.v3+json"})
+        d = r.json()
+        content = base64.b64decode(d['content']).decode()
+        return json.loads(content), d['sha']
+
+async def github_put_watchlist(watchlist, sha):
+    import base64 as b64
+    url = f"https://api.github.com/repos/{GITHUB_REPO}/contents/{WATCHLIST_PATH}"
+    body = {"message": "Update watchlist via GCC MCP", "content": b64.b64encode(json.dumps(watchlist, indent=2).encode()).decode(), "sha": sha}
+    async with httpx.AsyncClient(timeout=10.0) as client:
+        r = await client.put(url, headers={"Authorization": f"token {GITHUB_TOKEN}", "Accept": "application/vnd.github.v3+json", "Content-Type": "application/json"}, json=body)
+        return r.status_code == 200 or r.status_code == 201
+
 # ── MCP Manual Handler ─────────────────────────────────────────────────────────
 # Handles MCP initialize handshake directly — supports any protocol version
 # Claude.ai sends POST with {"method":"initialize","params":{"protocolVersion":"2025-11-25",...}}
@@ -3027,6 +3048,8 @@ async def mcp_handler(request: Request):
             {"name": "get_quotes", "description": "Get live quotes. Pass comma-separated symbols e.g. NVDA,MSEX", "inputSchema": {"type": "object", "properties": {"symbols": {"type": "string"}}, "required": ["symbols"]}},
             {"name": "macro_regime", "description": "Get macro regime: UPTREND, CORRECTION, or BEAR based on SPY+QQQ vs 200 SMA.", "inputSchema": {"type": "object", "properties": {}, "required": []}},
             {"name": "stealth_catalyst", "description": "Find stealth catalyst setups: 8-K filings where price hasn't moved yet.", "inputSchema": {"type": "object", "properties": {}, "required": []}},
+            {"name": "read_watchlist", "description": "Read the current GCC watchlist from GitHub. Returns all tickers with zones, stops, targets, and notes.", "inputSchema": {"type": "object", "properties": {}, "required": []}},
+            {"name": "write_watchlist", "description": "Add or remove a ticker from the GCC watchlist stored in GitHub. Use action=add or action=remove.", "inputSchema": {"type": "object", "properties": {"action": {"type": "string", "enum": ["add", "remove"]}, "symbol": {"type": "string"}, "z1_low": {"type": "number"}, "z1_high": {"type": "number"}, "stop": {"type": "number"}, "t1": {"type": "number"}, "t2": {"type": "number"}, "tier": {"type": "string"}, "notes": {"type": "string"}}, "required": ["action", "symbol"]}},
         ]
         return JSONResponse({"jsonrpc":"2.0","id":msg_id,"result":{"tools":tools}})
 
@@ -3085,6 +3108,36 @@ async def mcp_handler(request: Request):
                     return round((cl[-1]-sum(cl[-200:])/200)/(sum(cl[-200:])/200)*100,2)
                 sp=chk(spy); qp=chk(qqq)
                 result={"regime":"BEAR" if sp<0 and qp<0 else "CORRECTION" if sp<-3 or qp<-3 else "UPTREND","spy_vs_200sma":sp,"qqq_vs_200sma":qp}
+            elif tool_name == "read_watchlist":
+                watchlist, _ = await github_get_watchlist()
+                result = watchlist
+            elif tool_name == "write_watchlist":
+                action = tool_args.get("action","")
+                symbol = (tool_args.get("symbol","")).upper().strip()
+                watchlist, wsha = await github_get_watchlist()
+                if action == "remove":
+                    if symbol in watchlist["tickers"]:
+                        del watchlist["tickers"][symbol]
+                        watchlist["updated"] = datetime.utcnow().strftime("%Y-%m-%d")
+                        ok = await github_put_watchlist(watchlist, wsha)
+                        result = {"success": ok, "action": "removed", "symbol": symbol}
+                    else:
+                        result = {"success": False, "error": f"{symbol} not found in watchlist"}
+                elif action == "add":
+                    watchlist["tickers"][symbol] = {
+                        "z1": [tool_args.get("z1_low"), tool_args.get("z1_high")] if tool_args.get("z1_low") else None,
+                        "z2": tool_args.get("z2"),
+                        "stop": tool_args.get("stop"),
+                        "t1": tool_args.get("t1"),
+                        "t2": tool_args.get("t2"),
+                        "tier": tool_args.get("tier",""),
+                        "notes": tool_args.get("notes","")
+                    }
+                    watchlist["updated"] = datetime.utcnow().strftime("%Y-%m-%d")
+                    ok = await github_put_watchlist(watchlist, wsha)
+                    result = {"success": ok, "action": "added", "symbol": symbol, "data": watchlist["tickers"][symbol]}
+                else:
+                    result = {"error": "action must be add or remove"}
             else:
                 result={"error":f"Unknown tool: {tool_name}"}
             return JSONResponse({"jsonrpc":"2.0","id":msg_id,"result":{"content":[{"type":"text","text":json.dumps(result)}]}})
