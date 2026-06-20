@@ -555,6 +555,31 @@ let HOME_SYMBOLS=['NVDA','NVDL','NFLX','META','ORCL','RKLB','ASTS','QQQ','AMT','
 let pinBuffer='',wrongAttempts=0,watchlist=[],priceCache={},refreshTimer=null,cronTimers=[],currentTab='home';
 
 function saveWatchlist(){try{localStorage.setItem('gcc_watchlist',JSON.stringify(watchlist));}catch(e){}}
+async function loadWatchlistFromGitHub(){
+  try {
+    const url='https://raw.githubusercontent.com/gsaf5/fmp-service/main/watchlist.json?t='+Date.now();
+    const r=await fetch(url);
+    if(!r.ok) throw new Error('fetch failed');
+    const data=await r.json();
+    // Convert GitHub format to GCC format
+    watchlist=Object.entries(data.tickers||{}).map(([sym,d])=>({
+      symbol:sym,
+      name:'',
+      tier:d.tier||0,
+      zoneLow:d.z1?d.z1[0]:0,
+      zoneHigh:d.z1?d.z1[1]:0,
+      stop:d.stop||0,
+      target1:d.t1||0,
+      notes:d.notes||''
+    }));
+    saveWatchlist();
+    return true;
+  } catch(e){
+    console.warn('GitHub watchlist fetch failed, using localStorage',e);
+    return false;
+  }
+}
+
 function loadWatchlist(){
   try{const r=localStorage.getItem('gcc_watchlist');if(r){watchlist=JSON.parse(r);return;}}catch(e){}
   watchlist=[
@@ -1326,7 +1351,7 @@ async function loadPortfolioThenHome(){
 }
 
 function initDashboard(){
-  loadWatchlist();updateMarketStatus();updateHomeGreeting();loadPortfolioThenHome();loadScanFeed();clearTimers();
+  loadWatchlistFromGitHub().then(()=>{ if(!watchlist.length) loadWatchlist(); refreshAll(); }); loadWatchlist();updateMarketStatus();updateHomeGreeting();loadPortfolioThenHome();loadScanFeed();clearTimers();
   refreshTimer=setInterval(()=>{if(isMarketOpen()){loadHomePrices();if(currentTab==='watchlist')refreshAll();}},60000);
   cronTimers.push(setInterval(updateMarketStatus,30000));
   cronTimers.push(setInterval(updateHomeGreeting,60000));
