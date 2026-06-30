@@ -135,7 +135,7 @@ async def fetch_watchlist_data():
 # ── Routes ────────────────────────────────────────────────────────────────────
 @app.get("/ping")
 async def ping():
-    return {"status": "ok", "service": "Claude Market API v5.5",
+    return {"status": "ok", "service": "Claude Market API v5.6",
             "ts": datetime.utcnow().isoformat()}
 
 @app.get("/")
@@ -2091,6 +2091,20 @@ RANGE_CANDIDATES = [
     "EPAC", "BCPC", "NNBR", "NN", "SMID", "DXPE",
     # Healthcare Services (low binary risk)
     "MMSI", "ADUS", "AFAM", "AMED",
+    # Regional Banks (low beta, boring)
+    "WASH", "FFIC", "TRMK", "UBSI", "FCBC", "GABC", "CTBI",
+    # REITs / Real Assets (net-lease, storage, manufactured housing)
+    "UMH", "ALEX", "GTY", "ROIC",
+    # Rural Telecom / Regional Utilities
+    "ATNI", "OTTR", "MGEE", "ALE", "CPK",
+    # Specialty Insurance
+    "SIGI", "KMPR", "UFCS", "BRP",
+    # Business / Professional Services
+    "ABM", "CBZ", "RGP", "HSII",
+    # Healthcare Services II (low binary, steady)
+    "USPH", "EHC", "PNTG", "CHE",
+    # Consumer Staples II
+    "LANC", "JJSF", "FLO", "TR",
 ]
 
 @app.get("/range-screen")
