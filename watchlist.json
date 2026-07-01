@@ -1,5 +1,5 @@
 {
-  "updated": "2026-06-19",
+  "updated": "2026-07-01",
   "tickers": {
     "DVN": {
       "z1": [
@@ -198,6 +198,18 @@
       "t2": 740,
       "tier": "Tier2Taxable",
       "notes": "June 23 Korea catalyst; June 30 hard deadline; July 21 earnings; CEO 5x buyer sub-$575"
+    },
+    "NPK": {
+      "z1": [
+        105,
+        115
+      ],
+      "z2": null,
+      "stop": 91,
+      "t1": 140,
+      "t2": 150,
+      "tier": "Tier2Taxable",
+      "notes": "Quality compounder, $1.75-1.84B defense backlog vs $890M cap. AV conviction 6/10. Q1 EPS declined YoY (Housewares drag) despite Defense +23%. Patient accumulation on pullback, not chasing at $124."
     }
   }
 }
