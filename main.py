@@ -1,6 +1,7 @@
 import os
 import asyncio
 import math
+import base64
 from datetime import datetime
 from fastapi import FastAPI, Query, Depends, Header, HTTPException, Request, BackgroundTasks
 from fastapi.middleware.cors import CORSMiddleware
