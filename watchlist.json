@@ -67,18 +67,6 @@
       "tier": "Tier2Defense",
       "notes": "Z2 stop $520"
     },
-    "FLTCF": {
-      "z1": [
-        5.0,
-        5.5
-      ],
-      "z2": null,
-      "stop": 4.25,
-      "t1": 7.5,
-      "t2": 9.5,
-      "tier": "Taxable",
-      "notes": "currently $4.49 \u2014 below entry"
-    },
     "CDRE": {
       "z1": [
         29,
