@@ -3246,10 +3246,11 @@ async def mcp_handler(request: Request):
             elif tool_name == "get_quotes":
                 syms=[s.strip().upper() for s in tool_args.get("symbols","").split(",") if s.strip()]
                 async with httpx.AsyncClient(timeout=15.0) as client:
-                    r=await fmp(client,"quote",{"symbol":",".join(syms)})
+                    rs=await asyncio.gather(*[fmp(client,"quote",{"symbol":s}) for s in syms])
                 result={}
-                for q in (r if isinstance(r,list) else [r]):
-                    result[q.get("symbol","")]={"price":q.get("price"),"change_pct":q.get("changePercentage"),"volume":q.get("volume")}
+                for sym,r in zip(syms,rs):
+                    q=first(r)
+                    result[q.get("symbol",sym)]={"price":q.get("price"),"change_pct":q.get("changePercentage"),"volume":q.get("volume")}
             elif tool_name == "macro_regime":
                 from datetime import timedelta
                 fd=(datetime.utcnow()-timedelta(days=300)).strftime("%Y-%m-%d"); td=datetime.utcnow().strftime("%Y-%m-%d")
