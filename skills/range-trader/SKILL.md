@@ -73,6 +73,16 @@ Use the certified list returned by web_fetch of /range-screen.
 Floor, ceiling, touch counts, round trips, and zone are pre-computed.
 No additional historical data fetch needed for Gate 1.
 
+**Universe expansion (as of July 2, 2026):** /range-screen now defaults to
+`expand_universe=true`, which pulls ~15 additional liquid names from the
+current top 3 performing sectors and merges them with the static 86-name
+pool before running Gate 1. Response includes `dynamic_sectors_used` and
+`dynamic_fallback_used` — if `dynamic_fallback_used` is true, the live
+sector-performance endpoint wasn't available on the current FMP plan and a
+fixed fallback rotation (Technology, Energy, Financial Services, Basic
+Materials, Consumer Cyclical) was used instead. Gate 1/2 math itself is
+unchanged — this only widens who gets tested against it.
+
 **PASS criteria:** 3+ floor touches, 3+ ceiling touches, 2+ complete round trips confirmed.
 **FAIL:** Fewer touches, or box estimated rather than confirmed from price history.
 
@@ -127,6 +137,37 @@ Pull next earnings date via Railway /conviction or FMP earnings-calendar.
 - No activist investor activity or strategic review underway
 
 ---
+
+## TIER 2 — SANDBOX (Tactical Consolidations)
+
+Added July 2, 2026. A separate, lower-conviction bucket for shorter-base
+setups the 18-month Iron Range screen structurally can't see. NEVER mixed
+into the Certified Oscillators output — always presented under its own
+"🧪 SANDBOX WATCHLIST" header.
+
+**Data source:** `/range-screen-sandbox` via web_fetch (same auth header as
+`/range-screen`).
+
+**Gate 1-SANDBOX (replaces Gate 1 for this tier only):**
+- 9-month lookback (not 18)
+- 2 floor touches, 2 ceiling touches minimum (not 3)
+- 2 FULL completed round trips required (Floor→Ceiling→Floor→Ceiling) —
+  a partial/half round trip (price currently "in transit" between floor and
+  ceiling with no matching reversal) does NOT count. The server-side
+  `round_trips` field only ever counts whole completed cycles.
+
+**Gates 2–7:** unchanged from the Iron Range rules above.
+
+**Position sizing — 50% of Tier 1:**
+
+| Account | Entry Size |
+|---------|-----------|
+| Roth | $250–$500 starter |
+| SIMPLE/Trad IRA | $750–$1,250 |
+
+**Hold protocol:** same time-stop table as Iron Ranges, but treat Week 5
+stale-flag review more strictly given the thinner confirmation history.
+
 
 ## POSITION SIZING
 
@@ -208,4 +249,4 @@ Entry size: $X,XXX
 - MSEX (Middlesex Water) was the first certified oscillator — Gary bought 50sh @ $53.05 in SIMPLE IRA (June 16, 2026)
   Gary bought 50 shares at $53.05 in SIMPLE IRA
 
-**Last updated: June 18, 2026**
+**Last updated: July 2, 2026**

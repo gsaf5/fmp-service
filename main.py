@@ -2108,164 +2108,303 @@ RANGE_CANDIDATES = [
     "LANC", "JJSF", "FLO", "TR",
 ]
 
+DYNAMIC_SECTOR_FALLBACK = ["Technology", "Energy", "Financial Services", "Basic Materials", "Consumer Cyclical"]
+
+async def get_dynamic_range_candidates(client, top_n_sectors: int = 3, per_sector: int = 5):
+    """
+    Universe expansion for Range Trader. Pulls top-performing sectors (trailing
+    snapshot) and returns liquid, non-microcap tickers from those sectors so
+    Gate 1 has more raw material than only the static 86-name pool. Falls back
+    to a fixed sector rotation list if the live sector-performance endpoint
+    isn't available on the current FMP plan — never fails the whole scan.
+    """
+    top_sectors = []
+    try:
+        perf = await fmp(client, "sector-performance-snapshot", {})
+        if isinstance(perf, list) and perf:
+            ranked = sorted(
+                perf,
+                key=lambda x: x.get("changesPercentage") or x.get("averageChange") or 0,
+                reverse=True
+            )
+            top_sectors = [s.get("sector") for s in ranked[:top_n_sectors] if s.get("sector")]
+    except Exception:
+        top_sectors = []
+
+    used_fallback = False
+    if not top_sectors:
+        top_sectors = DYNAMIC_SECTOR_FALLBACK[:top_n_sectors]
+        used_fallback = True
+
+    dynamic_pool = []
+    for sector in top_sectors:
+        try:
+            r = await fmp(client, "company-screener", {
+                "sector": sector,
+                "marketCapMoreThan": 300000000,
+                "marketCapLowerThan": 15000000000,
+                "volumeMoreThan": 500000,
+                "isEtf": "false",
+                "isActivelyTrading": "true",
+                "country": "US",
+                "limit": per_sector,
+            })
+            if isinstance(r, list):
+                dynamic_pool.extend([s.get("symbol") for s in r if s.get("symbol")])
+        except Exception:
+            continue
+
+    return {"symbols": dynamic_pool, "sectors_used": top_sectors, "used_fallback": used_fallback}
+
+
+async def _screen_one_symbol(client, sym, from_date, to_date, min_touches: int, min_round_trips: int,
+                              width_low: float, width_high: float):
+    """
+    Runs Gate 1 (box width + touch count + round trips) for one symbol.
+    Shared by the 18-month Iron Range screen and the 9-month Sandbox screen —
+    only lookback window and touch/round-trip thresholds differ between them.
+    Returns (category, entry) where category is 'certified' | 'wide_box' | 'failure'.
+    """
+    try:
+        r = await fmp(client, "historical-price-eod/full", {
+            "symbol": sym, "from": from_date, "to": to_date,
+        })
+
+        if isinstance(r, dict) and "historical" in r:
+            raw = r["historical"]
+        elif isinstance(r, list):
+            raw = r
+        else:
+            return "failure", {"symbol": sym, "reason": "no data"}
+
+        ohlc = sorted([
+            {
+                "date":   str(b.get("date",""))[:10],
+                "high":   b.get("high"),
+                "low":    b.get("low"),
+                "close":  b.get("close") or b.get("adjClose"),
+                "volume": b.get("volume"),
+            }
+            for b in raw if b.get("close") or b.get("adjClose")
+        ], key=lambda x: x["date"])
+
+        if len(ohlc) < 60:
+            return "failure", {"symbol": sym, "reason": f"only {len(ohlc)} bars"}
+
+        closes = [b["close"] for b in ohlc if b["close"]]
+
+        # Internal body range (trim 5% extremes)
+        sorted_closes = sorted(closes)
+        trim      = max(1, int(len(sorted_closes) * 0.05))
+        body_low  = sorted_closes[trim]
+        body_high = sorted_closes[-trim]
+        body_width = (body_high - body_low) / body_low * 100
+
+        tolerance     = 0.03
+        floor_level   = body_low  * (1 + tolerance)
+        ceiling_level = body_high * (1 - tolerance)
+
+        # Touch counting
+        floor_touches   = []
+        ceiling_touches = []
+        last_fi = last_ci = -999
+
+        for i, bar in enumerate(ohlc):
+            lo = bar.get("low")  or 0
+            hi = bar.get("high") or 0
+            if lo and lo <= floor_level   and (i - last_fi) >= 10:
+                floor_touches.append(bar["date"]); last_fi = i
+            if hi and hi >= ceiling_level and (i - last_ci) >= 10:
+                ceiling_touches.append(bar["date"]); last_ci = i
+
+        # Round trips: direction_changes // 2 only counts FULL floor->ceiling->floor
+        # cycles — a trailing partial leg with no matching reversal is dropped by the
+        # integer division, so this is always a whole completed trip, never a half one.
+        all_t = sorted(
+            [{"date": d, "type": "floor"}   for d in floor_touches] +
+            [{"date": d, "type": "ceiling"} for d in ceiling_touches],
+            key=lambda x: x["date"]
+        )
+        direction_changes = 0
+        last_type = None
+        for t in all_t:
+            if last_type is not None and t["type"] != last_type:
+                direction_changes += 1
+            last_type = t["type"]
+        round_trips = direction_changes // 2
+
+        current_price = closes[-1]
+        box_width_ok  = width_low <= body_width <= width_high
+
+        # Zone
+        bottom_15 = body_low + (body_high - body_low) * 0.15
+        bottom_30 = body_low + (body_high - body_low) * 0.30
+        if current_price <= bottom_15:
+            zone = "TIER2_BUY"
+        elif current_price <= bottom_30:
+            zone = "TIER1_BUY"
+        elif current_price >= ceiling_level:
+            zone = "NEAR_CEILING"
+        else:
+            zone = "MID_RANGE"
+
+        entry = {
+            "symbol":          sym,
+            "current_price":   round(current_price, 2),
+            "body_low":        round(body_low, 2),
+            "body_high":       round(body_high, 2),
+            "body_width_pct":  round(body_width, 1),
+            "floor_touches":   len(floor_touches),
+            "ceiling_touches": len(ceiling_touches),
+            "round_trips":     round_trips,
+            "zone":            zone,
+            "tier2_buy_under": round(bottom_15, 2),
+            "tier1_buy_under": round(bottom_30, 2),
+        }
+
+        gate1_pass = (
+            len(floor_touches)   >= min_touches and
+            len(ceiling_touches) >= min_touches and
+            round_trips          >= min_round_trips and
+            box_width_ok
+        )
+
+        if gate1_pass:
+            return "certified", entry
+        elif body_width > width_high and len(floor_touches) >= min_touches and len(ceiling_touches) >= min_touches and round_trips >= min_round_trips:
+            entry["flag"] = "WIDE_BOX"
+            return "wide_box", entry
+        else:
+            entry["fail_reason"] = (
+                "box_width" if not box_width_ok else
+                "touches"   if (len(floor_touches) < min_touches or len(ceiling_touches) < min_touches) else
+                "round_trips"
+            )
+            return "failure", entry
+
+    except Exception as e:
+        return "failure", {"symbol": sym, "reason": str(e)[:80]}
+
+
 @app.get("/range-screen")
 async def range_screen(
     months: int = Query(default=18),
+    expand_universe: bool = Query(default=True),
     _key=Depends(verify_key)
 ):
     """
-    Runs Gate 1 (box width + touch count + round trips) across the full
-    Range Trader candidate pool. Returns certified setups only.
-    Sectors: equipment rental, utilities, consumer staples, industrial services,
-    specialty chemicals, food distribution, security, boring industrials.
+    TIER 1 — IRON RANGES. Runs Gate 1 (box width + touch count + round trips)
+    across the Range Trader candidate pool. Returns certified setups only.
+    Static pool covers: equipment rental, utilities, consumer staples, industrial
+    services, specialty chemicals, food distribution, security, boring industrials.
+    When expand_universe=true (default), also pulls liquid names from the current
+    top-performing sectors so the screen isn't limited to the same static names.
     """
     from datetime import datetime as dt, timedelta
 
     from_date = (dt.utcnow() - timedelta(days=int(months * 30.44))).strftime("%Y-%m-%d")
     to_date   = dt.utcnow().strftime("%Y-%m-%d")
 
-    results   = []
     certified = []
     wide_box  = []
     failures  = []
 
     async with httpx.AsyncClient(timeout=30.0) as client:
-        for sym in RANGE_CANDIDATES:
-            try:
-                r = await fmp(client, "historical-price-eod/full", {
-                    "symbol": sym,
-                    "from": from_date,
-                    "to": to_date,
-                })
+        candidate_pool = list(RANGE_CANDIDATES)
+        dynamic_info = {"symbols": [], "sectors_used": [], "used_fallback": False}
+        if expand_universe:
+            dynamic_info = await get_dynamic_range_candidates(client)
+            for sym in dynamic_info["symbols"]:
+                if sym not in candidate_pool:
+                    candidate_pool.append(sym)
 
-                if isinstance(r, dict) and "historical" in r:
-                    raw = r["historical"]
-                elif isinstance(r, list):
-                    raw = r
-                else:
-                    failures.append({"symbol": sym, "reason": "no data"})
-                    continue
-
-                ohlc = sorted([
-                    {
-                        "date":   str(b.get("date",""))[:10],
-                        "high":   b.get("high"),
-                        "low":    b.get("low"),
-                        "close":  b.get("close") or b.get("adjClose"),
-                        "volume": b.get("volume"),
-                    }
-                    for b in raw if b.get("close") or b.get("adjClose")
-                ], key=lambda x: x["date"])
-
-                if len(ohlc) < 60:
-                    failures.append({"symbol": sym, "reason": f"only {len(ohlc)} bars"})
-                    continue
-
-                closes = [b["close"] for b in ohlc if b["close"]]
-                lows   = [b["low"]   for b in ohlc if b["low"]]
-                highs  = [b["high"]  for b in ohlc if b["high"]]
-
-                # Internal body range (trim 5% extremes)
-                sorted_closes = sorted(closes)
-                trim      = max(1, int(len(sorted_closes) * 0.05))
-                body_low  = sorted_closes[trim]
-                body_high = sorted_closes[-trim]
-                body_width = (body_high - body_low) / body_low * 100
-
-                tolerance     = 0.03
-                floor_level   = body_low  * (1 + tolerance)
-                ceiling_level = body_high * (1 - tolerance)
-
-                # Touch counting
-                floor_touches   = []
-                ceiling_touches = []
-                last_fi = last_ci = -999
-
-                for i, bar in enumerate(ohlc):
-                    lo = bar.get("low")  or 0
-                    hi = bar.get("high") or 0
-                    if lo and lo <= floor_level   and (i - last_fi) >= 10:
-                        floor_touches.append(bar["date"]); last_fi = i
-                    if hi and hi >= ceiling_level and (i - last_ci) >= 10:
-                        ceiling_touches.append(bar["date"]); last_ci = i
-
-                # Round trips
-                all_t = sorted(
-                    [{"date": d, "type": "floor"}   for d in floor_touches] +
-                    [{"date": d, "type": "ceiling"} for d in ceiling_touches],
-                    key=lambda x: x["date"]
-                )
-                direction_changes = 0
-                last_type = None
-                for t in all_t:
-                    if last_type is not None and t["type"] != last_type:
-                        direction_changes += 1
-                    last_type = t["type"]
-                round_trips = direction_changes // 2
-
-                current_price = closes[-1]
-                box_width_ok  = 20 <= body_width <= 40
-
-                # Zone
-                bottom_15 = body_low + (body_high - body_low) * 0.15
-                bottom_30 = body_low + (body_high - body_low) * 0.30
-                if current_price <= bottom_15:
-                    zone = "TIER2_BUY"
-                elif current_price <= bottom_30:
-                    zone = "TIER1_BUY"
-                elif current_price >= ceiling_level:
-                    zone = "NEAR_CEILING"
-                else:
-                    zone = "MID_RANGE"
-
-                entry = {
-                    "symbol":          sym,
-                    "current_price":   round(current_price, 2),
-                    "body_low":        round(body_low, 2),
-                    "body_high":       round(body_high, 2),
-                    "body_width_pct":  round(body_width, 1),
-                    "floor_touches":   len(floor_touches),
-                    "ceiling_touches": len(ceiling_touches),
-                    "round_trips":     round_trips,
-                    "zone":            zone,
-                    "tier2_buy_under": round(bottom_15, 2),
-                    "tier1_buy_under": round(bottom_30, 2),
-                }
-
-                gate1_pass = (
-                    len(floor_touches)   >= 3 and
-                    len(ceiling_touches) >= 3 and
-                    round_trips          >= 2 and
-                    box_width_ok
-                )
-
-                if gate1_pass:
-                    certified.append(entry)
-                elif body_width > 40 and len(floor_touches) >= 3 and len(ceiling_touches) >= 3 and round_trips >= 2:
-                    # Valid oscillator but wide box — flag separately
-                    entry["flag"] = "WIDE_BOX"
-                    wide_box.append(entry)
-                else:
-                    entry["fail_reason"] = (
-                        "box_width" if not box_width_ok else
-                        "touches"   if (len(floor_touches) < 3 or len(ceiling_touches) < 3) else
-                        "round_trips"
-                    )
-                    failures.append(entry)
-
-            except Exception as e:
-                failures.append({"symbol": sym, "reason": str(e)[:80]})
+        for sym in candidate_pool:
+            category, entry = await _screen_one_symbol(
+                client, sym, from_date, to_date,
+                min_touches=3, min_round_trips=2, width_low=20, width_high=40
+            )
+            if category == "certified":
+                certified.append(entry)
+            elif category == "wide_box":
+                wide_box.append(entry)
+            else:
+                failures.append(entry)
 
     return no_cache({
-        "timestamp":        dt.utcnow().isoformat(),
-        "months":           months,
-        "candidates_run":   len(RANGE_CANDIDATES),
-        "certified_count":  len(certified),
-        "wide_box_count":   len(wide_box),
-        "certified":        certified,
-        "wide_box_flags":   wide_box,
-        "failure_count":    len(failures),
-        "failures":         failures,
+        "timestamp":             dt.utcnow().isoformat(),
+        "months":                months,
+        "candidates_run":        len(candidate_pool),
+        "static_pool_size":      len(RANGE_CANDIDATES),
+        "dynamic_pool_added":    len(dynamic_info["symbols"]),
+        "dynamic_sectors_used":  dynamic_info["sectors_used"],
+        "dynamic_fallback_used": dynamic_info["used_fallback"],
+        "certified_count":       len(certified),
+        "wide_box_count":        len(wide_box),
+        "certified":             certified,
+        "wide_box_flags":        wide_box,
+        "failure_count":         len(failures),
+        "failures":              failures,
+    })
+
+
+@app.get("/range-screen-sandbox")
+async def range_screen_sandbox(
+    months: int = Query(default=9),
+    expand_universe: bool = Query(default=True),
+    _key=Depends(verify_key)
+):
+    """
+    TIER 2 — SANDBOX (Tactical Consolidations). Shorter lookback and lower touch
+    bar than the Iron Range screen, but STILL requires 2 FULL completed round
+    trips (floor->ceiling->floor->ceiling) — no partial/half round trips ever
+    count. Results from this endpoint must NEVER be merged into /range-screen's
+    certified list — keep them in a clearly separate "Sandbox" section with
+    50% of normal position sizing.
+    """
+    from datetime import datetime as dt, timedelta
+
+    from_date = (dt.utcnow() - timedelta(days=int(months * 30.44))).strftime("%Y-%m-%d")
+    to_date   = dt.utcnow().strftime("%Y-%m-%d")
+
+    certified = []
+    wide_box  = []
+    failures  = []
+
+    async with httpx.AsyncClient(timeout=30.0) as client:
+        candidate_pool = list(RANGE_CANDIDATES)
+        dynamic_info = {"symbols": [], "sectors_used": [], "used_fallback": False}
+        if expand_universe:
+            dynamic_info = await get_dynamic_range_candidates(client)
+            for sym in dynamic_info["symbols"]:
+                if sym not in candidate_pool:
+                    candidate_pool.append(sym)
+
+        for sym in candidate_pool:
+            category, entry = await _screen_one_symbol(
+                client, sym, from_date, to_date,
+                min_touches=2, min_round_trips=2, width_low=20, width_high=40
+            )
+            if category == "certified":
+                certified.append(entry)
+            elif category == "wide_box":
+                wide_box.append(entry)
+            else:
+                failures.append(entry)
+
+    return no_cache({
+        "tier":                  "SANDBOX",
+        "timestamp":             dt.utcnow().isoformat(),
+        "months":                months,
+        "candidates_run":        len(candidate_pool),
+        "dynamic_sectors_used":  dynamic_info["sectors_used"],
+        "dynamic_fallback_used": dynamic_info["used_fallback"],
+        "certified_count":       len(certified),
+        "wide_box_count":        len(wide_box),
+        "certified":             certified,
+        "wide_box_flags":        wide_box,
+        "failure_count":         len(failures),
+        "failures":              failures,
+        "position_sizing_note":  "50% of Tier 1 size — Roth $250-$500, SIMPLE/Trad IRA $750-$1,250",
     })
 
 # ─────────────────────────────────────────────────────────────────────────────
