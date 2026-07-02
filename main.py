@@ -3246,7 +3246,7 @@ async def mcp_handler(request: Request):
             elif tool_name == "get_quotes":
                 syms=[s.strip().upper() for s in tool_args.get("symbols","").split(",") if s.strip()]
                 async with httpx.AsyncClient(timeout=15.0) as client:
-                    r=await fmp(client,f"quote/{','.join(syms)}",{})
+                    r=await fmp(client,"quote",{"symbol":",".join(syms)})
                 result={}
                 for q in (r if isinstance(r,list) else [r]):
                     result[q.get("symbol","")]={"price":q.get("price"),"change_pct":q.get("changesPercentage"),"volume":q.get("volume")}
@@ -3300,3 +3300,4 @@ async def mcp_handler(request: Request):
 
     # Unknown method
     return JSONResponse({"jsonrpc":"2.0","id":msg_id,"error":{"code":-32601,"message":f"Method not found: {method}"}})
+
