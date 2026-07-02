@@ -3249,7 +3249,7 @@ async def mcp_handler(request: Request):
                     r=await fmp(client,"quote",{"symbol":",".join(syms)})
                 result={}
                 for q in (r if isinstance(r,list) else [r]):
-                    result[q.get("symbol","")]={"price":q.get("price"),"change_pct":q.get("changesPercentage"),"volume":q.get("volume")}
+                    result[q.get("symbol","")]={"price":q.get("price"),"change_pct":q.get("changePercentage"),"volume":q.get("volume")}
             elif tool_name == "macro_regime":
                 from datetime import timedelta
                 fd=(datetime.utcnow()-timedelta(days=300)).strftime("%Y-%m-%d"); td=datetime.utcnow().strftime("%Y-%m-%d")
