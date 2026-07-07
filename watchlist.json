@@ -1,5 +1,5 @@
 {
-  "updated": "2026-07-01",
+  "updated": "2026-07-07",
   "tickers": {
     "DVN": {
       "z1": [
@@ -198,6 +198,18 @@
       "t2": 150,
       "tier": "Tier2Taxable",
       "notes": "Quality compounder, $1.75-1.84B defense backlog vs $890M cap. AV conviction 6/10. Q1 EPS declined YoY (Housewares drag) despite Defense +23%. Patient accumulation on pullback, not chasing at $124."
+    },
+    "PGY": {
+      "z1": [
+        14,
+        16
+      ],
+      "z2": null,
+      "stop": 12.5,
+      "t1": 23,
+      "t2": 26.9,
+      "tier": "Tier 1 Roth",
+      "notes": "AV conviction 7/10. AI credit underwriting (B2B, ABS-funded), Strong Buy consensus, CEO open-market buy 6/25/26 @$15.43. Currently extended +29% above 50-day MA at $18.38 \u2014 wait for pullback into zone rather than chase. Next earnings Aug 6, 2026. Bear case: consumer credit cycle risk, high beta 5.34, 19.5% short interest."
     }
   }
 }
