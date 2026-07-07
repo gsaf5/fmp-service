@@ -176,13 +176,20 @@ RESTRICTED_TICKERS = {
 # ── Technicals helpers ────────────────────────────────────────────────────────
 
 def _get_daily_closes(symbol: str, days: int = 260) -> pd.Series:
-    """Fetch daily closing prices from FMP historical-price-eod-light."""
+    """Fetch daily closing prices from FMP stable historical-price-eod-light."""
     import requests as req_lib
-    url = f"https://financialmodelingprep.com/api/v3/historical-price-full/{symbol}"
-    params = {"apikey": FMP_KEY, "serietype": "line"}
+    url = f"https://financialmodelingprep.com/stable/historical-price-eod-light/{symbol}"
+    params = {"apikey": FMP_KEY}
     r = req_lib.get(url, params=params, timeout=15)
     r.raise_for_status()
-    data = r.json().get("historical", [])
+    raw = r.json()
+    # stable endpoint returns list directly or wrapped in dict
+    if isinstance(raw, list):
+        data = raw
+    elif isinstance(raw, dict):
+        data = raw.get("historical", raw.get("data", []))
+    else:
+        data = []
     if not data:
         raise ValueError(f"No historical data returned for {symbol}")
     closes = pd.Series(
