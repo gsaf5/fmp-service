@@ -329,6 +329,7 @@ async def get_universe(
 ):
     """
     Returns pre-filtered S&P 500 candidate list for RothQuant monthly screening.
+    Loads from static sp500.json file in repo — no FMP API call needed.
 
     Default exclusions:
       - Utilities sector (low-growth, dividend-focused)
@@ -341,12 +342,10 @@ async def get_universe(
 
     Use this as Step 0 of every RothQuant run. Never score from memory alone.
     """
-    import requests as req_lib
     try:
-        url = "https://financialmodelingprep.com/api/v3/sp500_constituent"
-        r = req_lib.get(url, params={"apikey": FMP_KEY}, timeout=15)
-        r.raise_for_status()
-        constituents = r.json()
+        sp500_path = os.path.join(os.path.dirname(__file__), "sp500.json")
+        with open(sp500_path, "r") as f:
+            constituents = json.load(f)
 
         excluded_sectors = {s.strip() for s in exclude_sectors.split(",")} if exclude_sectors else set()
         filtered = []
@@ -406,11 +405,9 @@ async def get_universe_sector_breakdown(
     and plan batch scoring by sector priority.
     """
     try:
-        import requests as req_lib
-        url = "https://financialmodelingprep.com/api/v3/sp500_constituent"
-        r = req_lib.get(url, params={"apikey": FMP_KEY}, timeout=15)
-        r.raise_for_status()
-        constituents = r.json()
+        sp500_path = os.path.join(os.path.dirname(__file__), "sp500.json")
+        with open(sp500_path, "r") as f:
+            constituents = json.load(f)
 
         excluded_sectors = {s.strip() for s in exclude_sectors.split(",")} if exclude_sectors else set()
         filtered = []
