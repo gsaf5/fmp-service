@@ -133,6 +133,320 @@ async def fetch_watchlist_data():
     except Exception:
         return {}
 
+# ══════════════════════════════════════════════════════════════════════════════
+# ROTHQUANT V2 — Paste this block AFTER the helpers section (after line ~135)
+# and BEFORE the first @app.get("/ping") route.
+#
+# Adds four endpoints:
+#   GET /technicals?symbol=TICKER
+#   GET /technicals/batch?symbols=FICO,FTNT,EME
+#   GET /universe
+#   GET /universe/sector-breakdown
+#
+# Requires: pandas, numpy — add to requirements.txt if not already present
+# Created: June 20, 2026
+# ══════════════════════════════════════════════════════════════════════════════
+
+import pandas as pd
+import numpy as np
+from collections import Counter
+
+# ── Restricted entities (Jen's compliance list — tickers only) ────────────────
+RESTRICTED_TICKERS = {
+    "AFRM","AFL","AIG","AMC","DOX","NLY","APPN","AVPT","AVDX","AXTA",
+    "BW","BANC","BANF","BLKB","BNT","BFST","CCBG","CSL","KMX","CVNA",
+    "CCCS","CNC","CI","CIVI","CME","CNO","CSGP","CRBG","CRSS","DLX",
+    "DENN","DB","RDY","DFH","ELAN","ET","ENLC","ESCA","EXEL","INBK",
+    "FRME","FMBH","FSFG","FLS","FL","FBRT","FLL","GEN","GBCI","GPN",
+    "GMED","GOGO","LOPE","GRNT","GECC","GSBC","HRB","HASI","HBI","HAYW",
+    "HCI","HBIA","HQI","HOMB","HTBI","HBNC","HLI","HUM","ICAD","IROQ",
+    "IBKR","IBOC","ITIC","JBHT","JRVR","JAI","JMIA","KCLI","KBH","KFFB",
+    "KEQU","KEX","KKR","LEGH","LEG","LIN","LOB","LYFT","MMP","MBIN",
+    "MRCY","MESA","MAA","MODV","MUR","NBHC","NRC","NWLI","NAVI","NIC",
+    "NODK","NSC","OCFC","OLN","ONB","OSBC","OGS","OKE","KAR","KIDS",
+    "OBK","PEBK","PEBO","PGTI","PDLB","PRAA","FRST","PTC","PVH","RBA",
+    "REXR","RMBI","RLJ","ROK","ROP","RMBL","RUSHA","RYAN","SBR","SEB",
+    "SNLC","SFBS","BSRR","SFNC","SKX","SWKS","SLDE","SMBK","SAH","SPFI",
+    "SMBC","SR","SSNC","SCBFY","STWD","SPLP","SF","SYBT","STRM","SLF",
+    "SPWR","SNV","TAK","TDS","TS","TX","TCS","SO","TOWN","TSCO","UDR",
+    "ULTA","UNP","UTI","UPL","UWHR","VRA","MDRX","VERX","VSEC","WSBF",
+    "WEAV","WELL","WEST","WHG","WRLD","ZIM"
+}
+
+# ── Technicals helpers ────────────────────────────────────────────────────────
+
+def _get_daily_closes(symbol: str, days: int = 260) -> pd.Series:
+    """Fetch daily closing prices from FMP historical-price-eod-light."""
+    import requests as req_lib
+    url = f"https://financialmodelingprep.com/api/v3/historical-price-full/{symbol}"
+    params = {"apikey": FMP_KEY, "serietype": "line"}
+    r = req_lib.get(url, params=params, timeout=15)
+    r.raise_for_status()
+    data = r.json().get("historical", [])
+    if not data:
+        raise ValueError(f"No historical data returned for {symbol}")
+    closes = pd.Series(
+        {pd.to_datetime(d["date"]): float(d["close"]) for d in data}
+    ).sort_index()
+    return closes.tail(days)
+
+
+def _compute_rsi(closes: pd.Series, period: int = 14) -> float:
+    """Wilder's RSI — standard implementation."""
+    delta = closes.diff()
+    gain = delta.clip(lower=0)
+    loss = -delta.clip(upper=0)
+    avg_gain = gain.ewm(alpha=1 / period, min_periods=period).mean()
+    avg_loss = loss.ewm(alpha=1 / period, min_periods=period).mean()
+    rs = avg_gain / avg_loss.replace(0, np.nan)
+    rsi = 100 - (100 / (1 + rs))
+    return round(float(rsi.iloc[-1]), 2)
+
+
+def _compute_weekly_rsi(closes: pd.Series, period: int = 14) -> float:
+    """Resample daily closes to weekly, then compute RSI."""
+    weekly = closes.resample("W").last().dropna()
+    if len(weekly) < period + 1:
+        raise ValueError(f"Insufficient weekly data for RSI ({len(weekly)} weeks)")
+    return _compute_rsi(weekly, period)
+
+
+def _compute_momentum_score(
+    price: float,
+    sma_50: float,
+    sma_200: float,
+    rsi: float,
+    high_52wk: float
+) -> int:
+    """RothQuant Factor 4 scoring rubric — returns 1 to 10."""
+    near_high = price >= (high_52wk * 0.90)
+    above_50 = price > sma_50
+    above_200 = price > sma_200
+
+    if above_50 and above_200 and 55 <= rsi <= 70 and near_high:
+        return 10
+    elif above_50 and above_200 and 50 <= rsi <= 70:
+        return 9 if near_high else 8
+    elif above_200 and 45 <= rsi <= 65:
+        return 7 if above_50 else 6
+    elif abs(price - sma_200) / sma_200 <= 0.05 and 40 <= rsi <= 55:
+        return 5 if above_50 else 4
+    elif not above_50 and above_200 and rsi < 50:
+        return 3 if rsi >= 40 else 2
+    else:
+        return 1  # below 200-DMA or RSI < 40
+
+
+def _build_technicals(symbol: str) -> dict:
+    """Core technicals computation — shared by single and batch endpoints."""
+    closes = _get_daily_closes(symbol.upper(), days=260)
+
+    if len(closes) < 200:
+        return {
+            "symbol": symbol.upper(),
+            "error": f"Insufficient price history ({len(closes)} days, need 200+)"
+        }
+
+    price   = float(closes.iloc[-1])
+    sma_50  = float(closes.tail(50).mean())
+    sma_200 = float(closes.tail(200).mean())
+    rsi_14  = _compute_rsi(closes)
+    rsi_w   = _compute_weekly_rsi(closes)
+    high_52 = float(closes.tail(252).max())
+    low_52  = float(closes.tail(252).min())
+    mom     = _compute_momentum_score(price, sma_50, sma_200, rsi_14, high_52)
+
+    return {
+        "symbol":            symbol.upper(),
+        "price":             round(price, 2),
+        "sma_50":            round(sma_50, 2),
+        "sma_200":           round(sma_200, 2),
+        "pct_above_200":     round((price - sma_200) / sma_200 * 100, 1),
+        "price_vs_200":      "above" if price > sma_200 else "below",
+        "rsi_14":            rsi_14,
+        "rsi_weekly":        rsi_w,
+        "rsi_weekly_kill":   rsi_w > 85,
+        "high_52wk":         round(high_52, 2),
+        "low_52wk":          round(low_52, 2),
+        "pct_from_52wk_high": round((price - high_52) / high_52 * 100, 1),
+        "near_52wk_high":    price >= (high_52 * 0.90),
+        "momentum_score":    mom,
+        "overextension_kill": (price - sma_200) / sma_200 > 0.50
+    }
+
+
+# ── Technicals endpoints ──────────────────────────────────────────────────────
+
+@app.get("/technicals", dependencies=[Depends(verify_key)])
+async def get_technicals(symbol: str):
+    """
+    Compute 50-DMA, 200-DMA, RSI-14, weekly RSI, and RothQuant momentum score
+    for a single ticker. Uses free FMP historical-price-eod-light endpoint.
+
+    Key fields:
+      momentum_score    — RothQuant Factor 4 pre-score (1-10)
+      rsi_weekly_kill   — true if weekly RSI > 85 (hard kill gate)
+      overextension_kill — true if price > 50% above 200-DMA (hard kill gate)
+      pct_above_200     — % above/below 200-DMA
+      near_52wk_high    — true if within 10% of 52wk high
+    """
+    try:
+        return _build_technicals(symbol)
+    except Exception as e:
+        return {"error": str(e), "symbol": symbol.upper()}
+
+
+@app.get("/technicals/batch", dependencies=[Depends(verify_key)])
+async def get_technicals_batch(symbols: str):
+    """
+    Batch technicals for up to 10 comma-separated symbols.
+    Example: /technicals/batch?symbols=FICO,FTNT,EME,AXON,MEDP
+
+    Rate note: FMP allows ~300 req/min on free tier.
+    Each symbol = 1 API call. Max 10 symbols per batch call.
+    Errors per-symbol are non-fatal — partial results returned.
+    """
+    tickers = [s.strip().upper() for s in symbols.split(",")][:10]
+    results = []
+    for t in tickers:
+        try:
+            results.append(_build_technicals(t))
+        except Exception as e:
+            results.append({"symbol": t, "error": str(e)})
+    return {
+        "count": len(results),
+        "results": results
+    }
+
+
+# ── Universe endpoints ────────────────────────────────────────────────────────
+
+@app.get("/universe", dependencies=[Depends(verify_key)])
+async def get_universe(
+    exclude_sectors: str = "Utilities,Real Estate",
+    exclude_restricted: bool = True,
+    format: str = "tickers"
+):
+    """
+    Returns pre-filtered S&P 500 candidate list for RothQuant monthly screening.
+
+    Default exclusions:
+      - Utilities sector (low-growth, dividend-focused)
+      - Real Estate sector (REIT-heavy, not compounders)
+      - All restricted entities from Jen's compliance list
+
+    format param:
+      "tickers" — returns array of ticker symbols only (default)
+      "full"    — returns array with name, sector, subSector per ticker
+
+    Use this as Step 0 of every RothQuant run. Never score from memory alone.
+    """
+    import requests as req_lib
+    try:
+        url = "https://financialmodelingprep.com/api/v3/sp500_constituent"
+        r = req_lib.get(url, params={"apikey": FMP_KEY}, timeout=15)
+        r.raise_for_status()
+        constituents = r.json()
+
+        excluded_sectors = {s.strip() for s in exclude_sectors.split(",")} if exclude_sectors else set()
+        filtered = []
+        killed_restricted = []
+        killed_sector = []
+
+        for stock in constituents:
+            symbol = stock.get("symbol", "").upper()
+            sector = stock.get("sector", "")
+
+            if sector in excluded_sectors:
+                killed_sector.append(symbol)
+                continue
+
+            if exclude_restricted and symbol in RESTRICTED_TICKERS:
+                killed_restricted.append(symbol)
+                continue
+
+            filtered.append(stock)
+
+        if format == "full":
+            result = [
+                {
+                    "symbol":    s["symbol"],
+                    "name":      s.get("name", ""),
+                    "sector":    s.get("sector", ""),
+                    "subSector": s.get("subSector", "")
+                }
+                for s in filtered
+            ]
+        else:
+            result = [s["symbol"] for s in filtered]
+
+        return {
+            "universe_size":      len(result),
+            "excluded_sectors":   list(excluded_sectors),
+            "restricted_killed":  len(killed_restricted),
+            "sector_killed":      len(killed_sector),
+            "source":             "S&P 500 constituents via FMP",
+            "as_of":              datetime.utcnow().strftime("%Y-%m-%d"),
+            "tickers":            result if format == "tickers" else None,
+            "stocks":             result if format == "full"    else None
+        }
+
+    except Exception as e:
+        return {"error": str(e)}
+
+
+@app.get("/universe/sector-breakdown", dependencies=[Depends(verify_key)])
+async def get_universe_sector_breakdown(
+    exclude_sectors: str = "Utilities,Real Estate",
+    exclude_restricted: bool = True
+):
+    """
+    Returns sector distribution of the filtered RothQuant universe.
+    Use before scoring to understand what sectors are represented
+    and plan batch scoring by sector priority.
+    """
+    try:
+        import requests as req_lib
+        url = "https://financialmodelingprep.com/api/v3/sp500_constituent"
+        r = req_lib.get(url, params={"apikey": FMP_KEY}, timeout=15)
+        r.raise_for_status()
+        constituents = r.json()
+
+        excluded_sectors = {s.strip() for s in exclude_sectors.split(",")} if exclude_sectors else set()
+        filtered = []
+        killed_restricted = 0
+        killed_sector = 0
+
+        for stock in constituents:
+            symbol = stock.get("symbol", "").upper()
+            sector = stock.get("sector", "")
+            if sector in excluded_sectors:
+                killed_sector += 1
+                continue
+            if exclude_restricted and symbol in RESTRICTED_TICKERS:
+                killed_restricted += 1
+                continue
+            filtered.append(stock)
+
+        sector_counts = Counter(s.get("sector", "Unknown") for s in filtered)
+        subsector_counts = Counter(s.get("subSector", "Unknown") for s in filtered)
+
+        return {
+            "universe_size":       len(filtered),
+            "restricted_killed":   killed_restricted,
+            "sector_killed":       killed_sector,
+            "sector_distribution": dict(sector_counts.most_common()),
+            "top_subsectors":      dict(subsector_counts.most_common(20)),
+            "as_of":               datetime.utcnow().strftime("%Y-%m-%d")
+        }
+
+    except Exception as e:
+        return {"error": str(e)}
+
+# ══════════════════════════════════════════════════════════════════════════════
+# END ROTHQUANT V2 BLOCK
+# ══════════════════════════════════════════════════════════════════════════════
+
 # ── Routes ────────────────────────────────────────────────────────────────────
 @app.get("/ping")
 async def ping():
