@@ -3,4 +3,7 @@ uvicorn[standard]
 httpx
 gunicorn
 mcp>=1.28.0
-# cache-bust v5.8
+pandas
+numpy
+requests
+# cache-bust v5.9-rothquant
